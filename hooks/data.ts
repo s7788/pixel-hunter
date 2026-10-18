@@ -47,6 +47,10 @@ export const HUNTER = {
     charge: { action: 'G03', ticks: [3, 6, 3, 4], active: 2, damage: 30, stamina: 2, weight: 50 },
     trueCharge: { action: 'G05', ticks: [4, 3, 4, 4], active: 3, damage: 55, stamina: 3 },
     tackle: { action: 'G06', ticks: [3, 3, 3, 3], active: 2, damage: 12, stamina: 1, weight: 30 },
+    // camp only: walk to the fire, kneel by it (C21 F1), eat the meat (C21 F4)
+    walk: { action: 'C02', ticks: [3, 3, 3, 3] },
+    roast: { action: 'C21', ticks: [1] },
+    eat: { action: 'C21', ticks: [0, 0, 0, 1] },
   } satisfies Record<string, Move>,
   /** Poses of the roll during which a hit passes through. */
   rollInvulnerable: [1, 2] as const,
@@ -88,3 +92,19 @@ export const BODY_GAP = 2
 
 /** Where the camp idles and where the hunts are fought. */
 export const CAMP_SCENE: SceneId = 'S03'
+
+/**
+ * The camp between turns, for looks only (HP still refills on arrival): the
+ * hunter walks to the fire, kneels to roast meat, eats it, and roasts the next.
+ * World pixels; the fire is drawn over S03's own fire.
+ */
+export const CAMP = {
+  fireX: 104,
+  fireY: 163,
+  /** Where the hunter kneels, facing the fire. */
+  seatX: 166,
+  walkStep: 2,
+  restDelayTicks: 6,
+  roastTicks: 48,
+  eatTicks: 24,
+} as const

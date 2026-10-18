@@ -1,19 +1,24 @@
 {
   "groups": {
     "hunter": { "colors": 20, "anchor": "boots", "scale": { "images/03_greatsword.png": 1.25 } },
-    "vel": { "colors": 16 }
+    "vel": { "colors": 16 },
+    "camp": { "colors": 20, "anchor": "boots" }
   },
   "actions": [
     { "id": "C01", "group": "hunter", "board": "images/01_hunter_movement.png",
       "boxes": [[231, 95, 477, 172], [481, 95, 731, 172], [734, 95, 987, 172], [991, 95, 1243, 172]] },
     { "id": "C03", "group": "hunter", "board": "images/01_hunter_movement.png",
       "boxes": [[231, 272, 477, 353], [481, 272, 731, 353], [734, 272, 987, 353], [991, 272, 1243, 353]] },
+    { "id": "C02", "group": "camp", "board": "images/01_hunter_movement.png",
+      "boxes": [[231, 183, 477, 262], [481, 183, 731, 262], [734, 183, 987, 262], [991, 183, 1243, 262]] },
     { "id": "C08", "group": "hunter", "board": "images/01_hunter_movement.png", "align": false,
       "boxes": [[231, 730, 477, 810], [481, 730, 731, 810], [734, 730, 987, 810], [991, 730, 1243, 810]] },
     { "id": "C15", "group": "hunter", "board": "images/02_hunter_states.png",
       "boxes": [[164, 263, 422, 347], [426, 263, 696, 347], [700, 263, 969, 347], [973, 263, 1239, 347]] },
     { "id": "C17", "group": "hunter", "board": "images/02_hunter_states.png", "align": false, "anchorFrame": 3,
       "boxes": [[164, 442, 422, 528], [426, 442, 696, 528], [700, 442, 969, 528], [973, 442, 1239, 528]] },
+    { "id": "C21", "group": "camp", "board": "images/02_hunter_states.png", "align": false, "anchorFrame": 3,
+      "boxes": [[164, 800, 422, 878], [426, 800, 696, 878], [700, 800, 969, 878], [973, 800, 1239, 878]] },
     { "id": "G03", "group": "hunter", "board": "images/03_greatsword.png", "keepLeftOf": 100,
       "boxes": [[221, 255, 349, 340], [473, 255, 601, 340], [724, 255, 852, 340], [984, 255, 1112, 340]] },
     { "id": "G05", "group": "hunter", "board": "images/03_greatsword.png", "keepLeftOf": 100, "align": false, "anchorFrame": 0,
@@ -42,7 +47,7 @@
   "scenes": [
     { "id": "S01", "file": "scenes/01_ancient_forest.png", "size": [128, 72], "colors": 16, "ground": 57 },
     { "id": "S02", "file": "scenes/02_hoarfrost_reach.png", "size": [128, 72], "colors": 16, "ground": 58 },
-    { "id": "S03", "file": "scenes/03_winter_camp.png", "size": [128, 72], "colors": 16, "ground": 55 },
+    { "id": "S03", "file": "scenes/03_winter_camp.png", "size": [128, 72], "colors": 32, "ground": 55 },
     { "id": "S04", "file": "scenes/04_velkhana_ice_arena.png", "size": [128, 72], "colors": 16, "ground": 56 }
   ]
 }

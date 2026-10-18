@@ -4,7 +4,18 @@ export type HuntPhase = 'camp' | 'hunting' | 'retreat' | 'paused'
 export type HuntEvent = { at: number; text: string }
 
 export type HuntSceneId = 'S01' | 'S02' | 'S03' | 'S04'
-export type HunterMoveId = 'idle' | 'run' | 'roll' | 'hit' | 'down' | 'charge' | 'trueCharge' | 'tackle'
+export type HunterMoveId =
+  | 'idle'
+  | 'run'
+  | 'roll'
+  | 'hit'
+  | 'down'
+  | 'charge'
+  | 'trueCharge'
+  | 'tackle'
+  | 'walk'
+  | 'roast'
+  | 'eat'
 export type MonsterMoveId = 'idle' | 'walk' | 'tailStab' | 'iceBeam' | 'flinch' | 'topple' | 'getup'
 
 /** The state machine's place: at camp, travelling, fighting, or leaving a fight. */

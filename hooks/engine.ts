@@ -10,7 +10,7 @@ import type { Placement } from './collision'
 import { contactPart, hitboxes, hurtboxes, reaches } from './collision'
 import { MOVE_BOUNDS } from './collision-data'
 import type { Move } from './data'
-import { BODY_GAP, CAMP_SCENE, HUNTER, TICK_MS, VELKHANA } from './data'
+import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS, VELKHANA } from './data'
 import type { ActionId, SceneId } from './sprites'
 import { SCENES } from './sprites'
 
@@ -40,6 +40,8 @@ export type View = {
   stamina: number
   label: string
   monsterHpPercent: number | null
+  /** Camp props: the fire's flicker frame, and the meat on the spit (0 raw .. 1 done; null while eaten). */
+  camp: { flicker: number; cook: number | null } | null
 }
 
 const RUN_TICKS = 14
@@ -237,6 +239,19 @@ export function restore(saved: Game): Game {
   return g
 }
 
+/** Between turns: walk to the fire, kneel and roast, eat, roast the next. */
+function campRest(g: Game): void {
+  const h = g.hunter
+  if (h.move === 'idle' && g.modeT >= CAMP.restDelayTicks) {
+    h.facing = -1
+    hunterDo(g, 'walk')
+  } else if (h.move === 'walk') {
+    h.x = Math.max(CAMP.seatX, h.x - CAMP.walkStep)
+    if (h.x <= CAMP.seatX) hunterDo(g, 'roast')
+  } else if (h.move === 'roast' && h.t >= CAMP.roastTicks) hunterDo(g, 'eat')
+  else if (h.move === 'eat' && h.t >= CAMP.eatTicks) hunterDo(g, 'roast')
+}
+
 function toCamp(g: Game): void {
   setMode(g, 'camp')
   g.hunter = { ...g.hunter, move: 'idle', t: 0, x: HUNTER.campX, facing: 1, hp: HUNTER.hpMax, rollIn: -1, intent: null, attack: null }
@@ -260,11 +275,13 @@ export function step(game: Game, working: boolean): Game {
       if (working && !g.isResting && g.modeT >= CAMP_DELAY) {
         if (g.hunt === null) startHunt(g)
         setMode(g, 'leaving')
+        g.hunter.facing = 1
         hunterDo(g, 'run')
-      }
+      } else campRest(g)
       break
     case 'leaving':
-      g.hunter.x = HUNTER.campX + ((420 - HUNTER.campX) * g.modeT) / RUN_TICKS
+      // from wherever the hunter was resting, off the right edge in RUN_TICKS
+      g.hunter.x += (420 - g.hunter.x) / Math.max(1, RUN_TICKS - g.modeT + 1)
       if (g.modeT >= RUN_TICKS) {
         setMode(g, 'arriving')
         g.hunter.x = -40
@@ -611,5 +628,8 @@ export function viewOf(g: Game): View {
     stamina: h.stamina,
     label: g.labelT < LABEL_TICKS ? g.label : '',
     monsterHpPercent: g.hunt === null ? null : Math.round((100 * g.hunt.monsterHp) / g.hunt.monsterHpMax),
+    camp: inCamp
+      ? { flicker: g.simTick % 4, cook: h.move === 'eat' ? null : h.move === 'roast' ? Math.min(1, h.t / CAMP.roastTicks) : 0 }
+      : null,
   }
 }

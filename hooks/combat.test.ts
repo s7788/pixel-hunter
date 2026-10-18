@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { HuntAttack } from '../types'
-import { HUNTER, TICK_MS, VELKHANA } from './data'
+import { CAMP, HUNTER, TICK_MS, VELKHANA } from './data'
 import type { Game } from './engine'
 import { beginTurn, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
@@ -231,4 +231,39 @@ test('40 hunts average the target minutes (±20%); stats and tick time printed',
   )
   expect(avg).toBeGreaterThan(VELKHANA.targetMinutes * 0.8)
   expect(avg).toBeLessThan(VELKHANA.targetMinutes * 1.2)
+})
+
+test('camp between turns: walk to the fire, roast, eat, roast again; HP already full', () => {
+  let g = newGame(2)
+  const seen: string[] = []
+  for (let i = 0; i < 200; i += 1) {
+    g = step(g, false)
+    if (seen[seen.length - 1] !== g.hunter.move) seen.push(g.hunter.move)
+    expect(g.mode).toBe('camp')
+    expect(g.hunter.hp).toBe(HUNTER.hpMax)
+  }
+  expect(seen.slice(0, 5)).toEqual(['idle', 'walk', 'roast', 'eat', 'roast'])
+  expect(g.hunter.x).toBe(CAMP.seatX)
+  const view = viewOf(g)
+  expect(view.camp).not.toBeNull()
+  expect(huntSvg('camp', view, '88:88:88', false, true).length).toBeLessThan(131072)
+})
+
+test('a turn pulls the hunter away from the fire at once and off the right edge', () => {
+  let g = newGame(2)
+  for (let i = 0; i < 60; i += 1) g = step(g, false)
+  expect(g.hunter.move).toBe('roast')
+  g = beginTurn(g)
+  expect(g.mode).toBe('leaving')
+  expect(g.hunter.facing).toBe(1)
+  let last = g.hunter.x
+  while (g.mode === 'leaving') {
+    g = step(g, true)
+    if (g.mode === 'leaving') {
+      expect(g.hunter.x).toBeGreaterThan(last)
+      last = g.hunter.x
+    }
+  }
+  expect(last).toBeGreaterThan(384)
+  expect(g.mode).toBe('arriving')
 })

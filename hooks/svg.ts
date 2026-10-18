@@ -1,5 +1,5 @@
 import type { HuntPhase } from '../types'
-import { HUNTER, VELKHANA } from './data'
+import { CAMP, HUNTER, VELKHANA } from './data'
 import { attackReach, hitboxes, hurtboxes } from './collision'
 import type { Aabb, Placement } from './collision'
 import type { ActorView, View } from './engine'
@@ -82,6 +82,58 @@ function actor(a: ActorView, ground: number): string {
   return `<g transform="${place}">${paths}</g>`
 }
 
+/**
+ * Campfire flames, one shape per flicker frame: rows from the top, each a run
+ * start (from the fire's centre) and a colour letter per pixel.
+ */
+const FLAME_COLORS: Record<string, string> = { r: '#e8402a', o: '#ff8a1f', y: '#ffd21f', w: '#fff4c2' }
+const FLAMES: readonly (readonly [number, string][])[] = [
+  [[0, 'o'], [-1, 'ooo'], [-2, 'oyyo'], [-3, 'royyor'], [-3, 'rowyor'], [-4, 'roywyoor'], [-4, 'rroyyorr']],
+  [[1, 'o'], [-1, 'oyo'], [-2, 'royo'], [-3, 'royyor'], [-3, 'oywwyo'], [-4, 'royywyor'], [-4, 'rroyyorr']],
+  [[-1, 'o'], [-1, 'oo'], [-2, 'oyyo'], [-2, 'oywyo'], [-3, 'royyyor'], [-4, 'roywwyor'], [-4, 'rroyyorr']],
+  [[0, 'r'], [0, 'oo'], [-2, 'oyo'], [-3, 'royyor'], [-3, 'oywyyo'], [-4, 'royywyor'], [-4, 'rroyyorr']],
+]
+
+function rowsToRects(rows: readonly (readonly [number, string])[], x: number, y: number, size: number, colors: Record<string, string>): string {
+  let out = ''
+  rows.forEach(([start, run], r) => {
+    for (let i = 0; i < run.length; i += 1) {
+      const c = colors[run.charAt(i)]
+      if (c !== undefined) out += `<rect x="${x + (start + i) * size}" y="${y + r * size}" width="${size}" height="${size}" fill="${c}"/>`
+    }
+  })
+  return out
+}
+
+const mix = (a: number, b: number, k: number): number => Math.round(a + (b - a) * k)
+const meatColor = (cook: number): string => {
+  const raw = [0xd8, 0x4a, 0x5a]
+  const done = [0x8a, 0x48, 0x22]
+  return '#' + raw.map((v, i) => mix(v, done[i]!, cook).toString(16).padStart(2, '0')).join('')
+}
+
+/** The camp's fire (flickering), its logs, and the meat on a spit over it. */
+function campProps(camp: NonNullable<View['camp']>): string {
+  const x = CAMP.fireX
+  const base = CAMP.fireY
+  const flame = FLAMES[camp.flicker % FLAMES.length]!
+  let out =
+    `<rect x="${x - 12}" y="${base - 2}" width="24" height="4" fill="#5a3418"/>` +
+    `<rect x="${x - 9}" y="${base - 4}" width="18" height="3" fill="#7a4a24"/>` +
+    rowsToRects(flame, x - 1, base - 4 - flame.length * 2, 2, FLAME_COLORS) +
+    `<rect x="${x - 15}" y="${base - 24}" width="2" height="24" fill="#4a2c14"/>` +
+    `<rect x="${x + 13}" y="${base - 24}" width="2" height="24" fill="#4a2c14"/>` +
+    `<rect x="${x - 17}" y="${base - 25}" width="34" height="2" fill="#6b4020"/>`
+  if (camp.cook !== null) {
+    out +=
+      `<rect x="${x - 6}" y="${base - 29}" width="12" height="8" fill="${meatColor(camp.cook)}"/>` +
+      `<rect x="${x - 8}" y="${base - 27}" width="16" height="4" fill="${meatColor(camp.cook)}"/>` +
+      `<rect x="${x - 10}" y="${base - 26}" width="2" height="2" fill="#f4f0e0"/>` +
+      `<rect x="${x + 8}" y="${base - 26}" width="2" height="2" fill="#f4f0e0"/>`
+  }
+  return out
+}
+
 function bar(x: number, y: number, segs: number, filled: number, on: string, off: string): string {
   let out = `<rect x="${x - 2}" y="${y - 2}" width="${segs * 8 + 2}" height="10" fill="#10183a"/>`
   for (let i = 0; i < segs; i += 1) {
@@ -158,7 +210,8 @@ const CSS =
 /** The picture at one tick; `isFrozen` draws the interrupted hunt under a pause veil, `showBoxes` the collision overlay. */
 export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: boolean, showBoxes = false): string {
   const ground = SCENES[view.scene].ground * SCENE_SCALE
-  let actors = (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
+  let actors =
+    (view.camp === null ? '' : campProps(view.camp)) + (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
   if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground)) + boxes(view.hunter, ground)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +

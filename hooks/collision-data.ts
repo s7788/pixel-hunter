@@ -21,6 +21,7 @@ export const MOVE_BOUNDS = { hunter: [-18, 22], monster: [-62, 25] } as const
 
 export const BOXES: Readonly<Record<ActionId, ActionBoxes>> = {
   "C01": { "hurt": [{ "hunter_body": [-18, -64, 22, 0] }] },
+  "C02": { "hurt": [{}] },
   "C03": { "hurt": [{ "hunter_body": [0, -70, 45, 0] }] },
   "C08": { "hurt": [
     { "hunter_body": [-15, -58, 25, 0] },
@@ -30,6 +31,7 @@ export const BOXES: Readonly<Record<ActionId, ActionBoxes>> = {
   ] },
   "C15": { "hurt": [{ "hunter_body": [-30, -70, 18, 0] }] },
   "C17": { "hurt": [{}] },
+  "C21": { "hurt": [{}] },
   "G03": { "hurt": [{ "hunter_body": [-22, -55, 32, 0] }], "hit": { "pose": 2, "boxes": [[8, -72, 40, -45], [35, -92, 65, -65]] } },
   "G05": { "hurt": [
     { "hunter_body": [-25, -55, 30, 0] },
