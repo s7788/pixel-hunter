@@ -40,6 +40,8 @@ export type View = {
   stamina: number
   label: string
   monsterHpPercent: number | null
+  /** Debug: where recent hits met (the last MARK_TICKS ticks). */
+  marks: { x: number; y: number; outcome: Outcome }[]
   /** Camp props: the fire's flicker frame, and the meat on the spit (0 raw .. 1 done; null while eaten). */
   camp: { flicker: number; cook: number | null } | null
 }
@@ -67,6 +69,7 @@ const isOver = (move: Move, t: number): boolean => t >= sum(move.ticks)
 const SAVE_SCHEMA = 2
 const SCENE_SCALE = 3
 const HITS_KEPT = 30
+const MARK_TICKS = 8
 const LOOPING = new Set<string>(['idle', 'run', 'walk'])
 const poseOf = (key: string, move: Move, t: number): number => (LOOPING.has(key) ? loopPose(move, t) : poseAt(move, t))
 
@@ -367,7 +370,7 @@ const monsterMinX = (g: Game): number =>
 const isInvulnerable = (g: Game): boolean =>
   g.hunter.move === 'roll' && (HUNTER.rollInvulnerable as readonly number[]).includes(poseAt(HUNTER.moves.roll, g.hunter.t))
 
-type Contact = { source: 'hunter' | 'monster'; attack: Attack; part: string; outcome: Outcome; damage: number }
+type Contact = { source: 'hunter' | 'monster'; attack: Attack; part: string; x: number; y: number; outcome: Outcome; damage: number }
 
 /** This tick's contacts, judged on the state before any of them applies. */
 function findContacts(g: Game): Contact[] {
@@ -377,15 +380,24 @@ function findContacts(g: Game): Contact[] {
   const m = g.monster
   const h = g.hunter
   if (m.attack !== null && !m.attack.contacts.some(c => c.target === 'hunter')) {
-    const part = contactPart(hitboxes(mAction, mPose, monsterAt(g)), hurtboxes(hAction, hPose, hunterAt(g)))
-    if (part !== undefined) {
+    const touch = contactPart(hitboxes(mAction, mPose, monsterAt(g)), hurtboxes(hAction, hPose, hunterAt(g)))
+    if (touch !== undefined) {
       const evaded = isInvulnerable(g)
-      out.push({ source: 'monster', attack: m.attack, part, outcome: evaded ? 'evaded' : 'damaged', damage: evaded ? 0 : monsterMove(m.move).damage ?? 0 })
+      out.push({
+        source: 'monster',
+        attack: m.attack,
+        part: touch.part,
+        ...touch.point,
+        outcome: evaded ? 'evaded' : 'damaged',
+        damage: evaded ? 0 : monsterMove(m.move).damage ?? 0,
+      })
     }
   }
   if (h.attack !== null && !h.attack.contacts.some(c => c.target === 'monster')) {
-    const part = contactPart(hitboxes(hAction, hPose, hunterAt(g)), hurtboxes(mAction, mPose, monsterAt(g)))
-    if (part !== undefined) out.push({ source: 'hunter', attack: h.attack, part, outcome: 'damaged', damage: hunterMove(h.move).damage ?? 0 })
+    const touch = contactPart(hitboxes(hAction, hPose, hunterAt(g)), hurtboxes(mAction, mPose, monsterAt(g)))
+    if (touch !== undefined) {
+      out.push({ source: 'hunter', attack: h.attack, part: touch.part, ...touch.point, outcome: 'damaged', damage: hunterMove(h.move).damage ?? 0 })
+    }
   }
   return out
 }
@@ -406,7 +418,8 @@ function settle(g: Game): boolean {
   for (const c of found) {
     const target: 'hunter' | 'monster' = c.source === 'hunter' ? 'monster' : 'hunter'
     c.attack.contacts.push({ target, outcome: c.outcome, tick: g.simTick })
-    g.hits = [...g.hits, { attackId: c.attack.id, target, part: c.part, outcome: c.outcome, damage: c.damage, tick: g.simTick }].slice(-HITS_KEPT)
+    const hit = { attackId: c.attack.id, target, part: c.part, outcome: c.outcome, damage: c.damage, tick: g.simTick, x: c.x, y: c.y }
+    g.hits = [...g.hits, hit].slice(-HITS_KEPT)
     if (target === 'hunter') toHunter += c.damage
     else toMonster += c.damage
   }
@@ -673,6 +686,11 @@ export function viewOf(g: Game): View {
     stamina: h.stamina,
     label: g.labelT < LABEL_TICKS ? g.label : '',
     monsterHpPercent: g.hunt === null ? null : Math.round((100 * g.hunt.monsterHp) / g.hunt.monsterHpMax),
+    marks: inCamp
+      ? []
+      : g.hits.flatMap(hit =>
+          hit.x !== undefined && hit.y !== undefined && g.simTick - hit.tick < MARK_TICKS ? [{ x: hit.x, y: hit.y, outcome: hit.outcome }] : [],
+        ),
     camp: inCamp
       ? { flicker: g.simTick % 4, cook: h.move === 'eat' ? null : h.move === 'roast' ? Math.min(1, h.t / CAMP.roastTicks) : 0 }
       : null,

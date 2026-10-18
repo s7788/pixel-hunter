@@ -36,6 +36,9 @@ export type HuntHit = {
   outcome: HuntContactOutcome
   damage: number
   tick: number
+  /** World point where the boxes met (debug cross); absent on hits saved before v0.3.2. */
+  x?: number
+  y?: number
 }
 
 export type HuntActor<M extends string> = { move: M; t: number; x: number; wait: number; attack: HuntAttack | null }

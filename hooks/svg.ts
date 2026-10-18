@@ -181,13 +181,23 @@ const rect = (b: Aabb, cls: string): string =>
   `<rect class="${cls}" x="${b.minX}" y="${b.minY}" width="${b.maxX - b.minX}" height="${b.maxY - b.minY}"/>`
 
 /** Debug overlay: hurt (green), live hit (red), wind-up reach (grey dashed), foot anchor (cyan). */
-function boxes(a: ActorView, ground: number): string {
+function boxes(a: ActorView, ground: number, assetFacing: 1 | -1): string {
   const at: Placement = { x: a.x, groundY: ground, renderFlip: a.facing }
   let out = hurtboxes(a.action, a.frame, at).map(p => rect(p.box, 'bh')).join('')
   const live = hitboxes(a.action, a.frame, at)
   out += (live.length > 0 ? live.map(b => rect(b, 'bx')) : attackReach(a.action, at).map(b => rect(b, 'bw'))).join('')
+  // the way the actor really faces: the hunter is drawn facing right, the monster left
+  const dir = assetFacing * a.facing
+  const tip = a.x + dir * 12
+  out += `<path class="bd" d="M${a.x} ${ground + 5}H${tip}M${tip - dir * 3} ${ground + 2}L${tip} ${ground + 5}L${tip - dir * 3} ${ground + 8}"/>`
   return out + `<path class="ba" d="M${a.x - 3} ${ground}h6M${a.x} ${ground - 3}v6"/>`
 }
+
+/** Debug: a white cross where a hit met (grey when rolled through). */
+const marks = (list: View['marks']): string =>
+  list
+    .map(m => `<path class="${m.outcome === 'evaded' ? 'bm bv' : 'bm'}" d="M${m.x - 4} ${m.y - 4}l8 8M${m.x + 4} ${m.y - 4}l-8 8"/>`)
+    .join('')
 
 const PAUSED =
   `<rect width="${W}" height="${H}" fill="#0b1a3a" fill-opacity="0.55"/>` +
@@ -205,6 +215,9 @@ const CSS =
   `.bx{fill:#ff3030;fill-opacity:.3;stroke:#ff3030}` +
   `.bw{fill:none;stroke:#9aa3b5;stroke-dasharray:2 2}` +
   `.ba{stroke:#28e0ff}` +
+  `.bd{stroke:#28e0ff;fill:none}` +
+  `.bm{stroke:#ffffff;stroke-width:2}` +
+  `.bv{stroke:#9aa3b5}` +
   `.a{font:bold 13px sans-serif;fill:#f4f8ff;text-anchor:middle;paint-order:stroke;stroke:#10183a;stroke-width:3px}`
 
 /** The picture at one tick; `isFrozen` draws the interrupted hunt under a pause veil, `showBoxes` the collision overlay. */
@@ -212,7 +225,7 @@ export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: b
   const ground = SCENES[view.scene].ground * SCENE_SCALE
   let actors =
     (view.camp === null ? '' : campProps(view.camp)) + (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
-  if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground)) + boxes(view.hunter, ground)
+  if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground, -1)) + boxes(view.hunter, ground, 1) + marks(view.marks)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +
     `<style>${CSS}</style><g fill="none" stroke-width="1">${scene(view.scene)}${actors}</g>` +

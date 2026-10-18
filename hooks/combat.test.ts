@@ -281,3 +281,17 @@ test('the hunter never starts a swing into a monster attack that would reach; on
     expect(draws.length).toBeLessThanOrEqual(1)
   }
 })
+
+test('a hit records where the boxes met, and the debug view marks it for a moment', () => {
+  let g = tailStabIn(parked(), 0)
+  g = step(g, true)
+  const hit = g.hits.at(-1)!
+  // stab box x 103..163 at the monster's 238; hunter body 78..118: they meet on 103..118
+  expect(hit.x).toBe(111)
+  expect(hit.y).toBeGreaterThan(125)
+  expect(viewOf(g).marks).toEqual([{ x: hit.x!, y: hit.y!, outcome: 'damaged' }])
+  expect(huntSvg('hunting', viewOf(g), '00:00', false, true)).toContain('class="bm"')
+  g.hunter = { ...g.hunter, move: 'idle', t: 0, wait: 999 }
+  g = run(g, 8)
+  expect(viewOf(g).marks).toEqual([])
+})

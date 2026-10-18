@@ -1,6 +1,6 @@
 # hunt-8bit 交接（給接手的 Claude）
 
-這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、31 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
+這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、32 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
 
 ## 如何載入
 
@@ -62,12 +62,12 @@
 - 走位：獵人選招後若碰不到就用 C03 跑近（`runStep`），碰得到就出招。兩者身體以 `MOVE_BOUNDS` 加 `BODY_GAP` 保持距離。
 - 存檔：`saveSchemaVersion = 2`，新增 `simTick`、`nextAttackSerial`、`attack`、`intent`、`lastOutcome`、`hits`（最多 30 筆）。舊存檔或熱重載前的舊 world 都經 `migrate()`：在途攻擊丟棄、回營、血量不變。
 - `register.tsx` 用一條 promise 佇列（`serial`）依序處理 tick、turn.start、turn.complete、`/hunt-demo`，避免撤退後還有舊 tick 扣血。
-- 除錯：「除錯 ▾」內的「碰撞框」開關（預設關，存在 `$.store`）。綠＝受擊框、紅＝有效攻擊框、灰虛線＝出招前的攻擊範圍、青十字＝腳底；面板列出最近命中。
+- 除錯：「除錯 ▾」內的「碰撞框」開關（預設關，存在 `$.store`）。綠＝受擊框、紅＝有效攻擊框、灰虛線＝出招前的攻擊範圍、青十字＝腳底、青箭頭＝實際面向（獵人素材朝右、冰呪龍朝左）、白叉＝最近 8 tick 內的命中點（灰叉＝翻滾閃過）；面板列出最近命中。命中點是攻擊框與受擊框重疊區的中心，存在 `hits[].x/y`。
 - 調框：改 `hooks/collision-data.ts` 的數字。座標是未鏡像素材、以腳底錨點為原點（x 向右、y 向上為負）。`hit.pose` 必須等於 `data.ts` 的 `active`（有測試把關）。
 
 40 場固定種子模擬（`combat.test.ts` 的 40 場測試會印出）：平均 5.12 分鐘；力竭率 37.5%（舊版約 35%）；出招 3566、命中 3336；冰呪龍出招 1147、打中獵人 510、翻滾閃過 331；每 tick p95 < 1ms、最大 3ms。
 
-未完成：Desktop 實機驗收；規格 C33（校正零命中）只有程式防呆、沒有測試；接觸點十字與方向箭頭沒有畫。
+未完成：Desktop 實機驗收；規格 C33（校正零命中）只有程式防呆、沒有測試。
 
 ## 營地休息（v0.3）
 

@@ -50,9 +50,21 @@ export function reaches(attack: ActionId, from: Placement, target: ActionId, pos
 
 const PRIORITY: Record<Part, number> = { hunter_body: 0, head: 0, body: 1, tail: 2 }
 
-/** The part this tick's live hit boxes touch first by priority, or undefined. */
-export function contactPart(hits: Aabb[], hurt: PlacedBox[]): Part | undefined {
-  const touched = hurt.filter(h => hits.some(a => overlaps(a, h.box))).map(h => h.part)
-  touched.sort((a, b) => PRIORITY[a] - PRIORITY[b] || a.localeCompare(b))
-  return touched[0]
+export type Touch = { part: Part; point: { x: number; y: number } }
+
+/**
+ * The part this tick's live hit boxes touch first by priority, and the centre
+ * of where they meet (the first touching hit box), or undefined.
+ */
+export function contactPart(hits: Aabb[], hurt: PlacedBox[]): Touch | undefined {
+  const touched = hurt.filter(h => hits.some(a => overlaps(a, h.box)))
+  touched.sort((a, b) => PRIORITY[a.part] - PRIORITY[b.part] || a.part.localeCompare(b.part))
+  const first = touched[0]
+  if (first === undefined) return undefined
+  const a = hits.find(b => overlaps(b, first.box))!
+  const minX = Math.max(a.minX, first.box.minX)
+  const maxX = Math.min(a.maxX, first.box.maxX)
+  const minY = Math.max(a.minY, first.box.minY)
+  const maxY = Math.min(a.maxY, first.box.maxY)
+  return { part: first.part, point: { x: Math.round((minX + maxX) / 2), y: Math.round((minY + maxY) / 2) } }
 }
