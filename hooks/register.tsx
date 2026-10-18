@@ -11,6 +11,7 @@ const PANE = 'hunt-8bit'
 const TITLE = 'Hunt'
 const SAVE_KEY = 'save'
 const DEBUG_KEY = 'debugOpen'
+const BOXES_KEY = 'boxesOpen'
 /** Ticks between saves while the game moves (10 s). */
 const SAVE_EVERY = 80
 
@@ -20,6 +21,7 @@ const lastElapsedMs = atom({ plugin: 'hunt-8bit', key: 'lastElapsedMs' } as cons
 const world = atom({ plugin: 'hunt-8bit', key: 'world' } as const, null as HuntWorld | null)
 const log = atom({ plugin: 'hunt-8bit', key: 'log' } as const, [] as HuntEvent[])
 const debugOpen = atom({ plugin: 'hunt-8bit', key: 'debugOpen' } as const, true)
+const boxesOpen = atom({ plugin: 'hunt-8bit', key: 'boxesOpen' } as const, false)
 
 /** working_elapsed: MM:SS, HH:MM:SS past an hour. */
 const fmt = (ms: number): string => {
@@ -98,6 +100,8 @@ export const register: Register = on => {
     const stored = (await $.store.get(SAVE_KEY)) as Game | undefined
     const open = await $.store.get(DEBUG_KEY)
     if (typeof open === 'boolean') await update($, debugOpen, () => open)
+    const showBoxes = await $.store.get(BOXES_KEY)
+    if (typeof showBoxes === 'boolean') await update($, boxesOpen, () => showBoxes)
     const now = await $.clock.now()
     // a hot reload keeps the session's world; a new session restores the save
     await update($, world, w => w ?? { tick: 0, now, game: stored === undefined ? newGame(now) : restore(stored) })
@@ -145,10 +149,11 @@ export const register: Register = on => {
     const last = await read($, lastElapsedMs)
     const events = await read($, log)
     const isOpen = await read($, debugOpen)
+    const isBoxes = await read($, boxesOpen)
     if (w === null) return <Text dimColor>Hunt is loading…</Text>
     const elapsed = started === null ? last : Math.max(0, w.now - started)
     const view = viewOf(w.game)
-    const source = huntSvg(p, view, fmt(elapsed), p === 'paused')
+    const source = huntSvg(p, view, fmt(elapsed), p === 'paused', isOpen && isBoxes)
     const g = w.game
 
     return (
@@ -171,6 +176,17 @@ export const register: Register = on => {
         </Button>
         {isOpen && (
           <Box flexDirection="column">
+            <Button
+              key="boxes"
+              plain
+              onPress={async () => {
+                const next = !(await read($, boxesOpen))
+                await update($, boxesOpen, () => next)
+                await $.store.set(BOXES_KEY, next)
+              }}
+            >
+              {isBoxes ? '碰撞框 ■ 開' : '碰撞框 □ 關'}
+            </Button>
             <Text dimColor>
               phase {p} / mode {g.mode} / hunter {g.hunter.move} / monster {view.monster === null ? '-' : g.monster.move}
             </Text>

@@ -1,5 +1,7 @@
 import type { HuntPhase } from '../types'
 import { HUNTER, VELKHANA } from './data'
+import { attackReach, hitboxes, hurtboxes } from './collision'
+import type { Aabb, Placement } from './collision'
 import type { ActorView, View } from './engine'
 import type { RleRow, SceneId } from './sprites'
 import { ACTIONS, SCENES } from './sprites'
@@ -123,6 +125,18 @@ function hud(phase: HuntPhase, view: View, clock: string): string {
   )
 }
 
+const rect = (b: Aabb, cls: string): string =>
+  `<rect class="${cls}" x="${b.minX}" y="${b.minY}" width="${b.maxX - b.minX}" height="${b.maxY - b.minY}"/>`
+
+/** Debug overlay: hurt (green), live hit (red), wind-up reach (grey dashed), foot anchor (cyan). */
+function boxes(a: ActorView, ground: number): string {
+  const at: Placement = { x: a.x, groundY: ground, renderFlip: a.facing }
+  let out = hurtboxes(a.action, a.frame, at).map(p => rect(p.box, 'bh')).join('')
+  const live = hitboxes(a.action, a.frame, at)
+  out += (live.length > 0 ? live.map(b => rect(b, 'bx')) : attackReach(a.action, at).map(b => rect(b, 'bw'))).join('')
+  return out + `<path class="ba" d="M${a.x - 3} ${ground}h6M${a.x} ${ground - 3}v6"/>`
+}
+
 const PAUSED =
   `<rect width="${W}" height="${H}" fill="#0b1a3a" fill-opacity="0.55"/>` +
   `<text x="${W / 2}" y="${H / 2 + 8}" class="z">暫停</text>`
@@ -135,12 +149,17 @@ const CSS =
   `.s{font:bold 12px sans-serif;fill:#ffc23a;text-anchor:middle}` +
   `.w{font:bold 11px sans-serif;text-anchor:middle}` +
   `.z{font:bold 28px sans-serif;fill:#ffc23a;text-anchor:middle}` +
+  `.bh{fill:#2ee05a;fill-opacity:.2;stroke:#2ee05a}` +
+  `.bx{fill:#ff3030;fill-opacity:.3;stroke:#ff3030}` +
+  `.bw{fill:none;stroke:#9aa3b5;stroke-dasharray:2 2}` +
+  `.ba{stroke:#28e0ff}` +
   `.a{font:bold 13px sans-serif;fill:#f4f8ff;text-anchor:middle;paint-order:stroke;stroke:#10183a;stroke-width:3px}`
 
-/** The picture at one tick; `isFrozen` draws the interrupted hunt under a pause veil. */
-export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: boolean): string {
+/** The picture at one tick; `isFrozen` draws the interrupted hunt under a pause veil, `showBoxes` the collision overlay. */
+export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: boolean, showBoxes = false): string {
   const ground = SCENES[view.scene].ground * SCENE_SCALE
-  const actors = (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
+  let actors = (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
+  if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground)) + boxes(view.hunter, ground)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +
     `<style>${CSS}</style><g fill="none" stroke-width="1">${scene(view.scene)}${actors}</g>` +

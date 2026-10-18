@@ -25,12 +25,12 @@ const run = (g: Game, ticks: number, working = true): Game => {
   return out
 }
 
-test('every frame of a long hunt fits the Svg source limit, paused veil included', () => {
+test('every frame of a long hunt fits the Svg source limit, paused veil and collision boxes included', () => {
   let g = beginTurn(newGame(7))
   let largest = 0
   for (let i = 0; i < 3000; i += 1) {
     g = step(g, true)
-    largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', i % 2 === 0).length)
+    largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', i % 2 === 0, true).length)
   }
   expect(largest).toBeLessThan(131072)
 })

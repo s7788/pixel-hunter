@@ -51,6 +51,8 @@ declare module 'claude-code' {
       world: HuntWorld | null
       log: HuntEvent[]
       debugOpen: boolean
+      /** Draw the collision boxes over the scene (debug). */
+      boxesOpen: boolean
     }
   }
 }
