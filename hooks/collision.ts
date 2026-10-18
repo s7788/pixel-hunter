@@ -41,3 +41,18 @@ export function attackReach(action: ActionId, at: Placement): Aabb[] {
 }
 
 export const activePose = (action: ActionId): number | undefined => BOXES[action].hit?.pose
+
+/** Would this attack, thrown from here, touch the target as it stands now? */
+export function reaches(attack: ActionId, from: Placement, target: ActionId, pose: number, at: Placement): boolean {
+  const hurt = hurtboxes(target, pose, at)
+  return attackReach(attack, from).some(a => hurt.some(h => overlaps(a, h.box)))
+}
+
+const PRIORITY: Record<Part, number> = { hunter_body: 0, head: 0, body: 1, tail: 2 }
+
+/** The part this tick's live hit boxes touch first by priority, or undefined. */
+export function contactPart(hits: Aabb[], hurt: PlacedBox[]): Part | undefined {
+  const touched = hurt.filter(h => hits.some(a => overlaps(a, h.box))).map(h => h.part)
+  touched.sort((a, b) => PRIORITY[a] - PRIORITY[b] || a.localeCompare(b))
+  return touched[0]
+}

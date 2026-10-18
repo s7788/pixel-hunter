@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { HuntEvent, HuntPhase, HuntWorld } from '../types'
 import { TICK_MS } from './data'
 import type { Game } from './engine'
-import { beginTurn, endTurn, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { HUNT_SIZE, huntSvg } from './svg'
 
 const PANE = 'hunt-8bit'
@@ -93,6 +93,16 @@ async function finishTurn($: EngineInterface, reason: string): Promise<void> {
 
 export const register: Register = on => {
   let animation: Timer | undefined
+  /**
+   * Ticks, turn changes and the demo run one at a time, in arrival order, so a
+   * tick queued before a retreat or pause can never land a hit after it.
+   */
+  let queue: Promise<void> = Promise.resolve()
+  const serial = (work: () => Promise<void>): Promise<void> => {
+    const run = queue.then(work, work)
+    queue = run.catch(() => undefined)
+    return run
+  }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'hunt', description: 'Open the 8-bit hunt pane' })
@@ -103,13 +113,15 @@ export const register: Register = on => {
     const showBoxes = await $.store.get(BOXES_KEY)
     if (typeof showBoxes === 'boolean') await update($, boxesOpen, () => showBoxes)
     const now = await $.clock.now()
-    // a hot reload keeps the session's world; a new session restores the save
-    await update($, world, w => w ?? { tick: 0, now, game: stored === undefined ? newGame(now) : restore(stored) })
+    // a hot reload keeps the session's world (migrated if it predates collision); a new session restores the save
+    await update($, world, w =>
+      w !== null ? { ...w, game: migrate(w.game) } : { tick: 0, now, game: stored === undefined ? newGame(now) : restore(stored) },
+    )
     void $.ui.open({ id: PANE, title: TITLE })
     await note($, stored === undefined ? 'session.start (new hunter)' : 'session.start (save restored)')
     animation?.cancel()
     animation = $.clock.every(TICK_MS, () => {
-      void advance($)
+      void serial(() => advance($))
     })
     return next(e)
   })
@@ -121,21 +133,20 @@ export const register: Register = on => {
 
   on('command.run', { command: 'hunt-demo' }, async $ => {
     const isHunting = (await read($, phase)) === 'hunting'
-    if (isHunting) await finishTurn($, 'answer')
-    else await startTurn($, 'hunt-demo -> hunting')
+    await serial(() => (isHunting ? finishTurn($, 'answer') : startTurn($, 'hunt-demo -> hunting')))
     await $.ui.open({ id: PANE, title: TITLE })
     return { text: `Hunt demo: ${isHunting ? 'retreat' : 'hunting'}.` }
   })
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
-    await startTurn($, `turn.start ${e.turnId.slice(0, 8)}`)
+    await serial(() => startTurn($, `turn.start ${e.turnId.slice(0, 8)}`))
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
-    await finishTurn($, e.reason)
+    await serial(() => finishTurn($, e.reason))
     return next(e)
   })
 
@@ -200,6 +211,12 @@ export const register: Register = on => {
             {events.slice(-6).map(ev => (
               <Text dimColor>{ev.text}</Text>
             ))}
+            {isBoxes &&
+              g.hits.slice(-6).map(hit => (
+                <Text dimColor>
+                  #{hit.tick} {hit.attackId} → {hit.target}/{hit.part} {hit.outcome} {hit.damage}
+                </Text>
+              ))}
           </Box>
         )}
       </Box>

@@ -1,6 +1,6 @@
 # hunt-8bit 交接（給接手的 Claude）
 
-這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、9 個測試與 `claude plugin validate`，並由原作者在 Claude Desktop 實機確認第一版可用。
+這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、28 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
 
 ## 如何載入
 
@@ -25,10 +25,10 @@
 - 純 mod，不做 Godot；遊戲畫在右側 pane。
 - 渲染：只能用 SVG（方塊／path）；內嵌 PNG 會被引擎濾掉。每 125ms 由計時器送出「當下那一格」，不要用 CSS 動畫做逐格（會閃）。單張 SVG 上限 131,072 字元，單一原始檔上限 1 MB（所以格子用 RLE 拆檔）。
 - 美術：獵人與冰呪龍從參考板 1:1 擷取，只去背與平移對齊；冰呪龍必須與參考 100% 相同，不可重繪或改色。大劍板放大 1.25 倍對齊 01／02 板獵人身高。場景 128×72、16 色、3 倍顯示。
-- 特效保留在角色影格內；命中只看資料裡的 `active` 姿勢，不從發光像素推定。分層是 v2。
+- 特效保留在角色影格內；命中只看攻擊框在 `active` 姿勢時是否碰到受擊框，不從發光像素推定。分層是 v2。
 - 狩獵：冰呪龍有隱藏血量，跨回合與跨 session 累積（`$.store`，全域一位獵人）；歸零播 V25 倒地討伐，下一回合再開新一場；獵人力竭播 C17 回營，魔物血量保留。目標時長 5 分鐘，血量由固定種子模擬自動校正。新狩獵在 S02／S04 輪替，一場中途不換景。
 - 連動：主回合開始出營或續打；`answer` 完成時鏡像跑離再回營；中斷凍結並顯示「暫停」；子代理回合（`e.agentId` 有值）一律忽略。`working_elapsed` 只計主回合。
-- 戰鬥：本機規則加權重的隨機狀態機，閃避 70%，約 1/3 場會力竭，所有數值在 `hooks/data.ts`。不要每次出招都呼叫語言模型。
+- 戰鬥：本機規則加權重的隨機狀態機，所有數值在 `hooks/data.ts`。不要每次出招都呼叫語言模型。
 - 版本界線：沿用 World／Iceborne 動作方向，不加入 Rise／Sunbreak 的招式（見參考包 `CLAUDE_HANDOFF.md`）。
 
 ## 檔案地圖
@@ -39,7 +39,35 @@
 - `hooks/svg.ts`：格子轉 SVG、HUD、暫停遮罩、武器列。
 - `hooks/sprites.ts`：讀 RLE 的 `hooks/gen/*.ts`。
 - `types/index.d.ts`：`$.state` 契約與狀態機型別（必須自包含，不能 import）。
+- `hooks/collision-data.ts`：手工量測的受擊框、攻擊框、走位用身體寬度（純 JSON 物件，工具可直接讀）。
+- `hooks/collision.ts`：純幾何（座標換算、AABB、可達判斷、部位選擇）。
 - `hooks/hunt.test.tsx`：測試（時長校正、連動、存檔、SVG 大小上限）。
+- `hooks/collision.test.ts`、`hooks/combat.test.ts`：框資料、幾何、規格驗收案例與 40 場模擬統計。
+
+## 碰撞機制（v0.2，依 `hunt-8bit-collision-spec-v1.0.md`）
+
+與規格不同、經使用者確認的決定：
+
+1. 不做掃掠（swept AABB）與 tick 內切片。每 125ms 用當下姿勢的框檢查一次重疊；邊線、角接觸也算。理由：打鬥時移動每格只有幾像素。
+2. 受擊框每個動作一組；身體明顯變形的（C08、G05、V14、V23、V25、V26）逐姿勢。
+3. 這次不做肩撞減傷與 G10 防禦（規格 C22～C24 跳過）。
+4. 翻滾往後約 30 像素（面向後方），無敵仍是 F2～F3（250～1250ms）。
+5. 只在預測攻擊會碰到時才擲 70% 翻滾，一招只擲一次；出招中不能滾。
+6. 冰呪龍只從「碰得到的招」中抽，碰不到就走近或等待。
+7. 同一 tick 雙方互打一起結算；同時歸零 = 討伐 +1 且力竭 +1，`lastOutcome = 'mutual_ko'`，只走討伐回營。
+
+運作：
+
+- `hunterDo`／`monsterDo` 開始有 `active` 的招式時建立 `attack`（id = `huntNo:source:nextAttackSerial`），換招即取消。每 tick `settle()` 先用處理前狀態找出所有接觸，再一起扣血、處理中斷／硬直／倒地。`attack.contacts` 保證同招對同目標只結算一次（存檔也保留）。
+- 走位：獵人選招後若碰不到就用 C03 跑近（`runStep`），碰得到就出招。兩者身體以 `MOVE_BOUNDS` 加 `BODY_GAP` 保持距離。
+- 存檔：`saveSchemaVersion = 2`，新增 `simTick`、`nextAttackSerial`、`attack`、`intent`、`lastOutcome`、`hits`（最多 30 筆）。舊存檔或熱重載前的舊 world 都經 `migrate()`：在途攻擊丟棄、回營、血量不變。
+- `register.tsx` 用一條 promise 佇列（`serial`）依序處理 tick、turn.start、turn.complete、`/hunt-demo`，避免撤退後還有舊 tick 扣血。
+- 除錯：「除錯 ▾」內的「碰撞框」開關（預設關，存在 `$.store`）。綠＝受擊框、紅＝有效攻擊框、灰虛線＝出招前的攻擊範圍、青十字＝腳底；面板列出最近命中。
+- 調框：改 `hooks/collision-data.ts` 的數字。座標是未鏡像素材、以腳底錨點為原點（x 向右、y 向上為負）。`hit.pose` 必須等於 `data.ts` 的 `active`（有測試把關）。
+
+40 場固定種子模擬（`combat.test.ts` 最後一個測試會印出）：平均 4.92 分鐘；力竭率 57.5%（舊版約 35%）；出招 3621、命中 3374；冰呪龍出招 1007、打中獵人 557、翻滾閃過 204；每 tick p95 < 1ms、最大 3ms。
+
+未完成：Desktop 實機驗收；規格 C33（校正零命中）只有程式防呆、沒有測試；接觸點十字與方向箭頭沒有畫。
 
 ## 待做（v2，依優先序）
 

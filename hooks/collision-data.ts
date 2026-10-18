@@ -16,6 +16,9 @@ export type Part = 'hunter_body' | 'head' | 'body' | 'tail'
 export type PoseHurt = Readonly<Partial<Record<Part, LocalBox>>>
 export type ActionBoxes = { hurt: readonly PoseHurt[]; hit?: { pose: number; boxes: readonly LocalBox[] } }
 
+/** Simplified body widths [minX, maxX] for spacing only; they never deal damage. */
+export const MOVE_BOUNDS = { hunter: [-18, 22], monster: [-62, 25] } as const
+
 export const BOXES: Readonly<Record<ActionId, ActionBoxes>> = {
   "C01": { "hurt": [{ "hunter_body": [-18, -64, 22, 0] }] },
   "C03": { "hurt": [{ "hunter_body": [0, -70, 45, 0] }] },

@@ -26,8 +26,14 @@ export const HUNTER = {
   /** Idle ticks per stamina point regained, and per HP point regained. */
   staminaRegenTicks: 6,
   hpRegenTicks: 42,
+  /** Where the hunter enters a fight; from there it runs in and rolls back as needed. */
   x: 96,
   campX: 208,
+  /** Fight moves: run speed, roll distance (backwards), leftmost stance. */
+  runStep: 4,
+  rollDistance: 30,
+  minX: 16,
+  /** Chance to roll when a monster attack is predicted to reach; drawn once per attack. */
   dodgeRate: 0.7,
   idleTicks: [4, 10] as const,
   /** Chance to stand and wait instead of attacking when a normal opening comes. */
@@ -56,7 +62,8 @@ export const VELKHANA = {
   /** New hunts alternate between these grounds; a hunt never changes ground. */
   scenes: ['S02', 'S04'] as const satisfies readonly SceneId[],
   x: 262,
-  minX: 238,
+  /** Leftmost the monster walks in to reach the hunter. */
+  minX: 200,
   enterFromX: 440,
   walkStep: 12,
   idleTicks: [16, 40] as const,
@@ -75,6 +82,9 @@ export const VELKHANA = {
 } as const
 
 export type MonsterMove = keyof typeof VELKHANA.moves
+
+/** The two bodies never overlap: the gap kept between their body boxes. */
+export const BODY_GAP = 2
 
 /** Where the camp idles and where the hunts are fought. */
 export const CAMP_SCENE: SceneId = 'S03'
