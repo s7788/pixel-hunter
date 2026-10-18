@@ -267,3 +267,17 @@ test('a turn pulls the hunter away from the fire at once and off the right edge'
   expect(last).toBeGreaterThan(384)
   expect(g.mode).toBe('arriving')
 })
+
+test('the hunter never starts a swing into a monster attack that would reach; one dodge draw per attack', () => {
+  for (let seed = 1; seed <= 20; seed += 1) {
+    let g = tailStabIn(parked(seed), 6)
+    g.hunter.wait = 1
+    const draws: string[] = []
+    for (let i = 0; i < 9; i += 1) {
+      g = step(g, true)
+      expect(['charge', 'trueCharge', 'tackle']).not.toContain(g.hunter.move)
+      if (g.hunter.dodgeFor !== null && !draws.includes(g.hunter.dodgeFor)) draws.push(g.hunter.dodgeFor)
+    }
+    expect(draws.length).toBeLessThanOrEqual(1)
+  }
+})

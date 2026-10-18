@@ -115,6 +115,7 @@ export function newGame(seed: number): Game {
       facing: 1,
       rollIn: -1,
       intent: null,
+      dodgeFor: null,
     },
     monster: { move: 'idle', t: 0, x: VELKHANA.x, wait: 0, attack: null },
     seed,
@@ -221,7 +222,7 @@ export function migrate(saved: Game): Game {
     nextAttackSerial: 0,
     lastOutcome: null,
     hits: [],
-    hunter: { ...old.hunter, attack: null, intent: null, rollIn: -1 },
+    hunter: { ...old.hunter, attack: null, intent: null, rollIn: -1, dodgeFor: null },
     monster: { ...old.monster, attack: null },
   }
   if (g.mode === 'slain') g.hunt = null
@@ -505,8 +506,11 @@ function fight(g: Game): void {
     }
     if (h.move === 'idle') return
   }
+  // a monster attack on its way that would reach: never swing into it
+  if ((h.move === 'idle' || h.move === 'run') && h.rollIn < 0 && watch(g)) return
   if (h.move === 'run') {
-    runIn(g)
+    if (h.facing === -1) stopBackingOff(g)
+    else runIn(g)
     return
   }
   if (h.move !== 'idle') return
@@ -595,19 +599,60 @@ function monsterDecide(g: Game): void {
   const move = pick(g, options)
   monsterDo(g, move)
   say(g, move === 'iceBeam' ? '冰吐息' : '尾刺')
-  telegraph(g, monsterMove(move))
 }
 
-/** The hunter sees the attack coming: if it would reach, roll back (once per attack, by chance). */
-function telegraph(g: Game, attack: Move): void {
-  const h = g.hunter
-  if ((h.move !== 'idle' && h.move !== 'run') || !can(g, 'roll')) return
+/** Ticks until the monster's attack can first touch, while it can still touch; null when no threat. */
+function threat(g: Game): number | null {
+  const m = g.monster
+  const move = monsterMove(m.move)
+  if (m.attack === null || move.active === undefined || m.attack.contacts.some(c => c.target === 'hunter')) return null
+  const start = sum(move.ticks.slice(0, move.active))
+  const end = start + (move.ticks[move.active] ?? 0)
+  if (m.t >= end) return null
   const [hAction, hPose] = hunterPose(g)
-  if (!reaches(attack.action, monsterAt(g), hAction, hPose, hunterAt(g))) return
-  if (rand(g) >= HUNTER.dodgeRate) return
-  const until = sum(attack.ticks.slice(0, attack.active))
-  const safeFrom = sum(HUNTER.moves.roll.ticks.slice(0, HUNTER.rollInvulnerable[0]))
-  h.rollIn = Math.max(0, until - safeFrom - 2)
+  return reaches(move.action, monsterAt(g), hAction, hPose, hunterAt(g)) ? Math.max(0, start - m.t) : null
+}
+
+/**
+ * The free hunter (idle or running) watches the monster. An attack that would
+ * reach gets one dodge draw (per attack, the first time the hunter is free to
+ * see it); a roll is timed to meet it, otherwise the hunter backs off. Returns
+ * true when this tick went to dodging.
+ */
+function watch(g: Game): boolean {
+  const h = g.hunter
+  const coming = threat(g)
+  if (coming === null) return false
+  const id = g.monster.attack!.id
+  if (h.dodgeFor !== id) {
+    h.dodgeFor = id
+    if (can(g, 'roll') && rand(g) < HUNTER.dodgeRate) {
+      const safeFrom = sum(HUNTER.moves.roll.ticks.slice(0, HUNTER.rollInvulnerable[0]))
+      h.rollIn = Math.max(0, coming - safeFrom - 3)
+      h.intent = null
+      if (h.move === 'run') hunterDo(g, 'idle')
+      return true
+    }
+  }
+  backOff(g)
+  return true
+}
+
+/** Run away from the monster until its attack would no longer reach. */
+function backOff(g: Game): void {
+  const h = g.hunter
+  h.intent = null
+  if (h.move !== 'run' || h.facing !== -1) {
+    h.facing = -1
+    hunterDo(g, 'run')
+  }
+  h.x = Math.max(HUNTER.minX, h.x - HUNTER.runStep)
+}
+
+function stopBackingOff(g: Game): void {
+  g.hunter.facing = 1
+  hunterDo(g, 'idle')
+  g.hunter.wait = between(g, HUNTER.idleTicks)
 }
 
 const actorView = (move: Move, a: { t: number; x: number }, facing: 1 | -1, loop: boolean): ActorView => ({

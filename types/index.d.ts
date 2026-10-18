@@ -71,6 +71,8 @@ export type HuntGame = {
     rollIn: number
     /** The attack the hunter is running in to make, out of reach when chosen. */
     intent: HunterMoveId | null
+    /** The monster attack the hunter already drew its one dodge chance for. */
+    dodgeFor: string | null
   }
   monster: HuntActor<MonsterMoveId>
   seed: number
