@@ -58,34 +58,7 @@ export const HUNTER = {
 
 export type HunterMove = keyof typeof HUNTER.moves
 
-export const VELKHANA = {
-  name: '冰呪龍',
-  species: '古龍',
-  /** Minutes of Claude's work one hunt is tuned to last; damage scales to it. */
-  targetMinutes: 5,
-  /** New hunts alternate between these grounds; a hunt never changes ground. */
-  scenes: ['S02', 'S04'] as const satisfies readonly SceneId[],
-  x: 262,
-  /** Leftmost the monster walks in to reach the hunter. */
-  minX: 200,
-  enterFromX: 440,
-  walkStep: 12,
-  idleTicks: [16, 40] as const,
-  /** Damage taken between flinches, and between topples. */
-  flinchEvery: 70,
-  toppleEvery: 200,
-  moves: {
-    idle: { action: 'V01', ticks: [3, 3, 3, 3] },
-    walk: { action: 'V02', ticks: [3, 3, 3, 3], weight: 15 },
-    tailStab: { action: 'V14', ticks: [5, 3, 3, 3], active: 2, damage: 2, weight: 50 },
-    iceBeam: { action: 'V17', ticks: [3, 4, 6, 3], active: 2, damage: 2, weight: 35 },
-    flinch: { action: 'V23', ticks: [3, 3, 3, 3] },
-    topple: { action: 'V25', ticks: [3, 3, 3, 40] },
-    getup: { action: 'V26', ticks: [3, 4, 4, 3] },
-  } satisfies Record<string, Move>,
-} as const
-
-export type MonsterMove = keyof typeof VELKHANA.moves
+/** The monsters' tuning lives with each species in hooks/monsters. */
 
 /** The two bodies never overlap: the gap kept between their body boxes. */
 export const BODY_GAP = 2

@@ -2,7 +2,10 @@
   "groups": {
     "hunter": { "colors": 20, "anchor": "boots", "scale": { "images/03_greatsword.png": 1.25 } },
     "vel": { "colors": 16 },
-    "camp": { "colors": 20, "anchor": "boots" }
+    "camp": { "colors": 20, "anchor": "boots" },
+    "jagras": { "colors": 16, "resample": "box", "keepMain": 0.08, "dehalo": 2, "scale": {
+      "monsters/great_jagras/01-combat-and-states.png": 0.6, "monsters/great_jagras/02-locomotion.png": 0.6,
+      "monsters/great_jagras/03-reactions.png": 0.6 } }
   },
   "actions": [
     { "id": "C01", "group": "hunter", "board": "images/01_hunter_movement.png",
@@ -43,6 +46,31 @@
       "boxes": [[200, 582, 453, 687], [457, 582, 713, 687], [717, 582, 977, 687], [981, 582, 1247, 687]] },
     { "id": "V26", "group": "vel", "board": "images/08_velkhana_states.png", "align": false, "anchorFrame": 3,
       "boxes": [[200, 695, 453, 805], [457, 695, 713, 805], [717, 695, 977, 805], [981, 695, 1247, 805]] }
+,
+    { "id": "JG_IDLE", "group": "jagras", "board": "monsters/great_jagras/02-locomotion.png",
+      "boxes": [[5, 136, 261, 321], [262, 136, 512, 321], [512, 136, 769, 321], [769, 136, 1019, 321]] },
+    { "id": "JG_WALK", "group": "jagras", "board": "monsters/great_jagras/02-locomotion.png",
+      "boxes": [[5, 361, 261, 548], [262, 361, 512, 548], [512, 361, 769, 548], [769, 361, 1019, 548]] },
+    { "id": "JG01", "group": "jagras", "board": "monsters/great_jagras/01-combat-and-states.png",
+      "boxes": [[5, 137, 261, 320], [262, 137, 512, 320], [512, 137, 769, 320], [769, 137, 1019, 320]] },
+    { "id": "JG02", "group": "jagras", "board": "monsters/great_jagras/01-combat-and-states.png",
+      "boxes": [[5, 360, 261, 548], [262, 360, 512, 548], [512, 360, 769, 548], [769, 360, 1019, 548]] },
+    { "id": "JG03", "group": "jagras", "board": "monsters/great_jagras/01-combat-and-states.png",
+      "boxes": [[5, 587, 261, 778], [262, 587, 512, 778], [512, 587, 769, 778], [769, 587, 1019, 778]] },
+    { "id": "JG04", "group": "jagras", "board": "monsters/great_jagras/01-combat-and-states.png",
+      "boxes": [[5, 817, 261, 1005], [262, 817, 512, 1005], [512, 817, 769, 1005], [769, 817, 1019, 1005]] },
+    { "id": "JG_INFLATE", "group": "jagras", "board": "monsters/great_jagras/01-combat-and-states.png",
+      "boxes": [[5, 1045, 261, 1238], [262, 1045, 512, 1238], [512, 1045, 769, 1238], [769, 1045, 1019, 1238]] },
+    { "id": "JG_DEFLATE", "group": "jagras", "board": "monsters/great_jagras/01-combat-and-states.png",
+      "boxes": [[5, 1282, 261, 1488], [262, 1282, 512, 1488], [512, 1282, 769, 1488], [769, 1282, 1019, 1488]] },
+    { "id": "JG_FLINCH", "group": "jagras", "board": "monsters/great_jagras/03-reactions.png",
+      "boxes": [[5, 136, 261, 321], [262, 136, 512, 321], [512, 136, 769, 321], [769, 136, 1019, 321]] },
+    { "id": "JG_TOPPLE", "group": "jagras", "board": "monsters/great_jagras/03-reactions.png",
+      "boxes": [[5, 361, 261, 548], [262, 361, 512, 548], [512, 361, 769, 548], [769, 361, 1019, 548]] },
+    { "id": "JG_GETUP", "group": "jagras", "board": "monsters/great_jagras/03-reactions.png",
+      "boxes": [[5, 587, 261, 777], [262, 587, 512, 777], [512, 587, 769, 777], [769, 587, 1019, 777]] },
+    { "id": "JG_DEATH", "group": "jagras", "board": "monsters/great_jagras/03-reactions.png",
+      "boxes": [[5, 1283, 261, 1467], [262, 1283, 512, 1467], [512, 1283, 769, 1467], [769, 1283, 1019, 1467]] }
   ],
   "scenes": [
     { "id": "S01", "file": "scenes/01_ancient_forest.png", "size": [128, 72], "colors": 16, "ground": 57 },

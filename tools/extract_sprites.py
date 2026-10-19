@@ -6,7 +6,14 @@ away from the crop edge, the ground line cut, frames of one action translated
 onto F1 (pixels untouched), colors quantized to one palette per group. A group
 may be scaled (nearest neighbour) so boards drawn at different sizes match.
 
-Usage: PYTHONUTF8=1 python -I tools/extract_sprites.py <reference-pack-dir> [--measure | --sheet <png>]
+Usage: PYTHONUTF8=1 python -I tools/extract_sprites.py <reference-pack-dir> [--only <group>] [--measure | --sheet <png>]
+
+--only <group> extracts that one group (its boards relative to the pack given)
+and leaves the other groups and the scenes as they are: the monster packs are
+separate downloads from the first reference pack. A group with
+"resample": "box" is scaled by area averaging with the alpha cut at half, and
+"keepMain": f drops pieces under f of the largest one (effects such as spit,
+dust and motion lines are drawn by the mod on their own layer).
 Spec:  tools/extract_spec.json
 Out:   hooks/gen/<group>.ts and hooks/gen/scenes.ts, each row run-length encoded
        as <palette letter or '.'><count, omitted when 1> (each file stays far
@@ -141,6 +148,62 @@ def drop_islands(mask, keep_left_of=None):
                     mask[cy][cx] = False
 
 
+def keep_main(rgba, share):
+    """Clear connected pieces smaller than `share` of the largest (8-connected)."""
+    w, h = rgba.size
+    a = rgba.getchannel('A').load()
+    px = rgba.load()
+    seen = [[False] * w for _ in range(h)]
+    comps = []
+    for y0 in range(h):
+        for x0 in range(w):
+            if not a[x0, y0] or seen[y0][x0]:
+                continue
+            comp, q = [], deque([(x0, y0)])
+            seen[y0][x0] = True
+            while q:
+                x, y = q.popleft()
+                comp.append((x, y))
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < w and 0 <= ny < h and a[nx, ny] and not seen[ny][nx]:
+                            seen[ny][nx] = True
+                            q.append((nx, ny))
+            comps.append(comp)
+    if not comps:
+        return rgba
+    biggest = max(len(c) for c in comps)
+    for c in comps:
+        if len(c) < share * biggest:
+            for x, y in c:
+                px[x, y] = (0, 0, 0, 0)
+    return rgba
+
+
+def box_scale(img, s):
+    """Area-average scale; a pixel stays only where at least half its area was covered."""
+    out = img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.BOX)
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, al = px[x, y]
+            px[x, y] = (r, g, b, 255) if al >= 128 else (0, 0, 0, 0)
+    return out
+
+
+def dehalo(mask, crop, bg, passes, tol=60):
+    """Peel outline pixels that are mostly board background (its anti-aliasing), `passes` times."""
+    h, w = len(mask), len(mask[0])
+    px = crop.load()
+    for _ in range(passes):
+        edge = [(x, y) for y in range(h) for x in range(w) if mask[y][x] and dist(px[x, y], bg) < tol and any(
+            not (0 <= nx < w and 0 <= ny < h) or not mask[ny][nx]
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))]
+        for x, y in edge:
+            mask[y][x] = False
+
+
 def frame_rgba(board, box, blanks, action):
     box = (box[0] + INSET, box[1] + INSET, box[2] - INSET, box[3] - INSET)
     crop = board.crop(box)
@@ -153,6 +216,8 @@ def frame_rgba(board, box, blanks, action):
     cut_ground(mask)
     drop_hairlines(mask)
     drop_islands(mask, action.get('keepLeftOf'))
+    if action.get('dehalo'):
+        dehalo(mask, crop, background(crop), action['dehalo'])
     rgba = crop.convert('RGBA')
     px = rgba.load()
     for y in range(crop.height):
@@ -248,14 +313,20 @@ def shared_palette(images, colors):
 def main():
     pack = sys.argv[1]
     measure = '--measure' in sys.argv
+    only = sys.argv[sys.argv.index('--only') + 1] if '--only' in sys.argv else None
     spec = json.load(open(os.path.join(HERE, 'extract_spec.json'), encoding='utf-8'))
+    if only is not None:
+        spec['groups'] = {only: spec['groups'][only]}
+        spec['actions'] = [a for a in spec['actions'] if a['group'] == only]
+        spec['scenes'] = []
     boards = {}
     raw = {}
     for action in spec['actions']:
         path = os.path.join(pack, action['board'])
         board = boards.setdefault(path, Image.open(path).convert('RGB'))
         blanks = [tuple(b) for b in action.get('blank', [])]
-        raw[action['id']] = [frame_rgba(board, tuple(b), blanks, action) for b in action['boxes']]
+        opts = {**spec['groups'].get(action['group'], {}), **action}
+        raw[action['id']] = [frame_rgba(board, tuple(b), blanks, opts) for b in action['boxes']]
     if '--sheet' in sys.argv:
         dest = sys.argv[sys.argv.index('--sheet') + 1]
         cw, ch = 270, 125
@@ -277,7 +348,13 @@ def main():
         scaled = {}
         for a in members:
             s = group.get('scale', {}).get(a['board'], 1.0)
-            scaled[a['id']] = [f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.NEAREST) for f in raw[a['id']]]
+            if group.get('resample') == 'box':
+                frames = [box_scale(f, s) for f in raw[a['id']]]
+            else:
+                frames = [f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.NEAREST) for f in raw[a['id']]]
+            if 'keepMain' in group:
+                frames = [keep_main(f, group['keepMain']) for f in frames]
+            scaled[a['id']] = frames
         pal_img, palette = shared_palette([f for fs in scaled.values() for f in fs], group['colors'])
         out['palette'] = palette
         for a in members:
@@ -290,6 +367,8 @@ def main():
             }
             print(a['id'], gid, frames[0].width, 'x', frames[0].height)
         write_ts(gid, gid.upper(), out)
+    if only is not None:
+        return
     for sc in spec['scenes']:
         img = Image.open(os.path.join(pack, sc['file'])).convert('RGB').resize(tuple(sc['size']), Image.BOX)
         q = img.quantize(colors=sc['colors'], method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)

@@ -1,5 +1,5 @@
 import type { HuntPhase } from '../types'
-import { CAMP, HUNTER, VELKHANA } from './data'
+import { CAMP, HUNTER } from './data'
 import { attackReach, hitboxes, hurtboxes } from './collision'
 import type { Aabb, Placement } from './collision'
 import type { ActorView, View } from './engine'
@@ -168,8 +168,8 @@ function hud(phase: HuntPhase, view: View, clock: string): string {
     `<text x="8" y="17" class="t">HP</text>${bar(34, 9, HUNTER.hpMax, view.hp, low ? '#e8402a' : '#2ee05a', '#2a3550')}` +
     `<text x="8" y="33" class="t">ST</text>${bar(34, 25, HUNTER.staminaMax, view.stamina, '#ffd21f', '#2a3550')}` +
     `<rect x="284" y="6" width="94" height="58" fill="#10183a" stroke="#f0a020" stroke-width="2"/>` +
-    `<text x="331" y="21" class="n">${view.monster === null ? '—' : VELKHANA.name}</text>` +
-    `<text x="331" y="31" class="p">${view.monster === null ? '' : VELKHANA.species}</text>` +
+    `<text x="331" y="21" class="n">${view.monsterInfo?.name ?? '—'}</text>` +
+    `<text x="331" y="31" class="p">${view.monsterInfo?.status ?? view.monsterInfo?.species ?? ''}</text>` +
     `<text x="331" y="45" class="c">${clock}</text>` +
     `<text x="331" y="59" class="s">${PHASE_LABEL[phase]}</text>` +
     (view.label === '' ? '' : `<text x="192" y="${H - 34}" class="a">${view.label}</text>`) +
@@ -184,7 +184,7 @@ const rect = (b: Aabb, cls: string): string =>
 function boxes(a: ActorView, ground: number, assetFacing: 1 | -1): string {
   const at: Placement = { x: a.x, groundY: ground, renderFlip: a.facing }
   let out = hurtboxes(a.action, a.frame, at).map(p => rect(p.box, 'bh')).join('')
-  const live = hitboxes(a.action, a.frame, at)
+  const live = hitboxes(a.action, a.frame, at, a.hitShift ?? 0)
   out += (live.length > 0 ? live.map(b => rect(b, 'bx')) : attackReach(a.action, at).map(b => rect(b, 'bw'))).join('')
   // the way the actor really faces: the hunter is drawn facing right, the monster left
   const dir = assetFacing * a.facing
@@ -192,6 +192,23 @@ function boxes(a: ActorView, ground: number, assetFacing: 1 | -1): string {
   out += `<path class="bd" d="M${a.x} ${ground + 5}H${tip}M${tip - dir * 3} ${ground + 2}L${tip} ${ground + 5}L${tip - dir * 3} ${ground + 8}"/>`
   return out + `<path class="ba" d="M${a.x - 3} ${ground}h6M${a.x} ${ground - 3}v6"/>`
 }
+
+/** A ball of stomach fluid on its live hit box: a dark rim, green body, a light glint. */
+function spit(b: Aabb): string {
+  const x = b.minX
+  const y = b.minY
+  const w = b.maxX - b.minX
+  const h = b.maxY - b.minY
+  return (
+    `<rect x="${x + 2}" y="${y}" width="${w - 4}" height="${h}" fill="#4a5a12"/>` +
+    `<rect x="${x}" y="${y + 2}" width="${w}" height="${h - 4}" fill="#4a5a12"/>` +
+    `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" fill="#a8c42a"/>` +
+    `<rect x="${x + 4}" y="${y + 4}" width="4" height="3" fill="#e8f27a"/>` +
+    `<rect x="${x + w}" y="${y + h / 2 - 1}" width="6" height="2" fill="#a8c42a" fill-opacity=".6"/>`
+  )
+}
+
+const effects = (list: View['effects']): string => list.map(e => (e.fx === 'spit' ? spit(e.box) : '')).join('')
 
 /** Debug: a white cross where a hit met (grey when rolled through). */
 const marks = (list: View['marks']): string =>
@@ -224,7 +241,10 @@ const CSS =
 export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: boolean, showBoxes = false): string {
   const ground = SCENES[view.scene].ground * SCENE_SCALE
   let actors =
-    (view.camp === null ? '' : campProps(view.camp)) + (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
+    (view.camp === null ? '' : campProps(view.camp)) +
+    (view.monster === null ? '' : actor(view.monster, ground)) +
+    actor(view.hunter, ground) +
+    effects(view.effects)
   if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground, -1)) + boxes(view.hunter, ground, 1) + marks(view.marks)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +

@@ -1,14 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { HuntAttack } from '../types'
-import { CAMP, HUNTER, TICK_MS, VELKHANA } from './data'
+import { CAMP, HUNTER, TICK_MS } from './data'
+import { VELKHANA } from './monsters/registry'
 import type { Game } from './engine'
 import { beginTurn, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
 
 /** A fight with both sides parked: nobody decides anything for a long while. */
 function parked(seed = 1): Game {
-  let g = beginTurn(newGame(seed))
+  let g = beginTurn(newGame(seed), 'velkhana')
   while (g.mode !== 'fight') g = step(g, true)
   g.hunter = { ...g.hunter, move: 'idle', t: 0, x: HUNTER.x, wait: 999, rollIn: -1, intent: null, attack: null, facing: 1 }
   g.monster = { ...g.monster, move: 'idle', t: 0, x: VELKHANA.minX + 38, wait: 999, attack: null }
@@ -136,11 +137,12 @@ test('C25/C26: a saved attack that already hit does not hit again after a reload
 })
 
 test('C27/C28: an old save migrates to camp, HP kept, nothing under way', () => {
-  const g = run(beginTurn(newGame(4)), 300)
+  const g = run(beginTurn(newGame(4), 'velkhana'), 300)
   const old = JSON.parse(JSON.stringify(g)) as Record<string, unknown>
   for (const key of ['saveSchemaVersion', 'simTick', 'nextAttackSerial', 'lastOutcome', 'hits']) delete old[key]
   const back = migrate(old as unknown as Game)
-  expect(back.saveSchemaVersion).toBe(2)
+  expect(back.saveSchemaVersion).toBe(3)
+  expect(back.hunt?.monsterId).toBe('velkhana')
   expect(back.mode).toBe('camp')
   expect(back.hunt?.monsterHp).toBe(g.hunt?.monsterHp)
   expect(back.hunter.attack).toBeNull()
@@ -149,7 +151,7 @@ test('C27/C28: an old save migrates to camp, HP kept, nothing under way', () => 
 })
 
 test('C29/C30: travel, retreat and camp never deal damage', () => {
-  let g = beginTurn(newGame(6))
+  let g = beginTurn(newGame(6), 'velkhana')
   for (let i = 0; i < 20; i += 1) {
     g = step(g, true)
     if (g.mode === 'fight') break
@@ -166,7 +168,7 @@ test('C29/C30: travel, retreat and camp never deal damage', () => {
 
 test('C31/C35: the same seed replays the same hits; drawing boxes changes nothing', () => {
   const play = (draw: boolean): Game => {
-    let g = beginTurn(newGame(21))
+    let g = beginTurn(newGame(21), 'velkhana')
     for (let i = 0; i < 1500; i += 1) {
       g = step(g, true)
       if (draw) huntSvg('hunting', viewOf(g), '00:00', false, true)
@@ -183,7 +185,7 @@ test('C36: from the usual stances the hunter runs in and lands all three swings'
   const landed = new Set<string>()
   let tried = 0
   for (let seed = 1; seed <= 6 && landed.size < 3; seed += 1) {
-    let g = beginTurn(newGame(seed))
+    let g = beginTurn(newGame(seed), 'velkhana')
     for (let i = 0; i < 4000; i += 1) {
       const move = g.hunter.move
       g = step(g, true)
@@ -201,7 +203,7 @@ test('40 hunts average the target minutes (±20%); stats and tick time printed',
   const tally = { swings: 0, landed: 0, monsterAttacks: 0, hunterHit: 0, evaded: 0, rolls: 0 }
   const ms: number[] = []
   for (let seed = 1; seed <= 40; seed += 1) {
-    let g = beginTurn(newGame(seed * 7919))
+    let g = beginTurn(newGame(seed * 7919), 'velkhana')
     let t = 0
     while (g.slain === 0 && t < 40000) {
       const prev = g
@@ -253,7 +255,7 @@ test('a turn pulls the hunter away from the fire at once and off the right edge'
   let g = newGame(2)
   for (let i = 0; i < 60; i += 1) g = step(g, false)
   expect(g.hunter.move).toBe('roast')
-  g = beginTurn(g)
+  g = beginTurn(g, 'velkhana')
   expect(g.mode).toBe('leaving')
   expect(g.hunter.facing).toBe(1)
   let last = g.hunter.x

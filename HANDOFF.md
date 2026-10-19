@@ -1,6 +1,6 @@
 # hunt-8bit 交接（給接手的 Claude）
 
-這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、32 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
+這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、45 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
 
 ## 如何載入
 
@@ -10,7 +10,7 @@
    - Desktop／SDK：設環境變數 `CLAUDE_CODE_PLUGIN_DIRS=<資料夾>`，必要時加 `CLAUDE_CODE_PLUGIN_DIR_WATCH=1`。
    - 先載入 `plugin-authoring` skill 再改 mod，它會說明型別檔與熱重載。
 3. 驗證指令（在資料夾內）：`claude plugin validate .`、`claude plugin test .`、`npx -p typescript@5.6.3 tsc -p . --noEmit`。型別檔由引擎在第一次載入時寫到 `.claude-plugin/types/`，沒有載入過就不能跑 `tsc`。
-4. 指令：`/hunt` 開 pane，`/hunt-demo` 手動開始／結束狩獵（除錯）。pane 在 Desktop 為 dock 於右側。
+4. 指令：`/hunt` 開 pane，`/hunt-demo` 手動開始／結束狩獵（除錯）；`/hunt-demo <魔物 id>` 丟棄進行中的狩獵、立刻打一場指定魔物（`engine.debugHunt`）。pane 在 Desktop 為 dock 於右側。
 
 ## 重新擷取素材需要什麼
 
@@ -26,7 +26,7 @@
 - 渲染：只能用 SVG（方塊／path）；內嵌 PNG 會被引擎濾掉。每 125ms 由計時器送出「當下那一格」，不要用 CSS 動畫做逐格（會閃）。單張 SVG 上限 131,072 字元，單一原始檔上限 1 MB（所以格子用 RLE 拆檔）。
 - 美術：獵人與冰呪龍從參考板 1:1 擷取，只去背與平移對齊；冰呪龍必須與參考 100% 相同，不可重繪或改色。大劍板放大 1.25 倍對齊 01／02 板獵人身高。場景 128×72、16 色、3 倍顯示。
 - 特效保留在角色影格內；命中只看攻擊框在 `active` 姿勢時是否碰到受擊框，不從發光像素推定。分層是 v2。
-- 狩獵：冰呪龍有隱藏血量，跨回合與跨 session 累積（`$.store`，全域一位獵人）；歸零播 V25 倒地討伐，下一回合再開新一場；獵人力竭播 C17 回營，魔物血量保留。目標時長 5 分鐘，血量由固定種子模擬自動校正。新狩獵在 S02／S04 輪替，一場中途不換景。
+- 狩獵：冰呪龍有隱藏血量，跨回合與跨 session 累積（`$.store`，全域一位獵人）；歸零播 V25 倒地討伐，下一回合再開新一場；獵人力竭播 C17 回營，魔物血量保留。目標時長 5 分鐘，血量由固定種子模擬自動校正。新狩獵在 S02／S04 輪替，一場中途不換景。（v0.4 起：每隻魔物有自己的目標時長與場景，見「魔物註冊與大凶豺龍」。）
 - 連動：主回合開始出營或續打；`answer` 完成時鏡像跑離再回營；中斷凍結並顯示「暫停」；子代理回合（`e.agentId` 有值）一律忽略。`working_elapsed` 只計主回合。
 - 戰鬥：本機規則加權重的隨機狀態機，所有數值在 `hooks/data.ts`。不要每次出招都呼叫語言模型。
 - 版本界線：沿用 World／Iceborne 動作方向，不加入 Rise／Sunbreak 的招式（見參考包 `CLAUDE_HANDOFF.md`）。
@@ -34,8 +34,9 @@
 ## 檔案地圖
 
 - `hooks/register.tsx`：所有 hooks（turn、計時器、指令、pane 繪製、`$.store` 存檔）。
-- `hooks/engine.ts`：純函式狀態機（`step`、`beginTurn`、`endTurn`、`restore`、`viewOf`）與血量校正。
-- `hooks/data.ts`：全部調校數值。
+- `hooks/engine.ts`：純函式狀態機（`step`、`beginTurn`、`endTurn`、`restore`、`viewOf`）與逐魔物血量校正。
+- `hooks/monsters/`：魔物定義與註冊表（見下方「魔物註冊與大凶豺龍」）。
+- `hooks/data.ts`：獵人與營地的調校數值（魔物數值在各自的定義檔）。
 - `hooks/svg.ts`：格子轉 SVG、HUD、暫停遮罩、武器列。
 - `hooks/sprites.ts`：讀 RLE 的 `hooks/gen/*.ts`。
 - `types/index.d.ts`：`$.state` 契約與狀態機型別（必須自包含，不能 import）。
@@ -76,11 +77,36 @@
 - 營地場景 S03 改成 32 色（16 色時帳篷、營火的暖色會被量化成藍色）。
 - 營火火焰（4 格閃動）、木柴、烤肉架與肉（由生到熟變色）由 `svg.ts` 的 `campProps()` 用小方塊畫，位置與時間在 `data.ts` 的 `CAMP`。這些是道具，不是重畫角色。
 
+## 魔物註冊與大凶豺龍（v0.4）
+
+依參考包 `hunt-8bit-all-monsters-reference-v1.1` 的 `specs/hunt-8bit-monster-expansion-spec-v1.0.md`（第 2、3、4.1、6、7 節）。
+
+- 結構：`hooks/monsters/types.ts`（`MonsterDef`、`MonsterMove`、`Mechanic`）、`registry.ts`（`MONSTERS`、`enabledMonsters`）、`velkhana.ts`、`great_jagras.ts`。引擎只讀選定的定義；專屬規則寫在 `mechanic`（`decide`／`damaged`／`idleMove` 等），引擎把 `act`／`say` 借給它，避免互相 import。
+- 冰呪龍回歸：搬進註冊表後，40 場模擬與搬移前逐項相同（平均 5.12 分、力竭率 37.5%、出招 3566、命中 3336、冰呪龍出招 1147、打中 510、閃過 331、翻滾 384）。
+- 存檔 `saveSchemaVersion = 3`：`hunt` 新增 `monsterId`、`definitionVersion`、`state`、`stateT`、`parts`、`cooldowns`。schema 2 存檔補欄位為冰呪龍、HP 與進行中的戰鬥保留；schema 1 照舊回營。找不到定義的魔物：留在營地、任務資料不動，標籤顯示「魔物資料未就緒」。
+- 選怪：`drawMonster` 用種子與 `huntNo` 雜湊挑已啟用的魔物，不消耗戰鬥亂數。場景用該魔物的 `scenes` 依 `huntNo` 輪替。測試與校正用 `beginTurn(g, monsterId)` 指定魔物。
+- 招式時間：規格的 `[start,end)`／總長對到四個關鍵姿勢，有效姿勢就是有效窗（例：JG01 `[6,8)`／16 → `[3,3,2,8]`、active 2）。`advance`：有效段內根位移（碰到獵人身體就停）。`travel`：拋射物每 tick 前進的像素，攻擊框隨之移動，到有效窗結束消失；魔物被打斷時一併取消（規格 3.3 第一版行為）。
+- 選招：有 `range` 的招用軀幹間距的近／中／遠帶（0–32／32–96／96–160），沒有的（冰呪龍）照舊用「框碰得到」。`state` 限定狀態，`cooldown` 從出招當下記為「開始 + 動作長度 + 冷卻」。`approachWeight` 讓大凶豺龍在可出招時也可能走近。
+- 反應優先序：死亡 > 專屬破壞（腹部）> 倒地 > 硬直；倒地中（`opening` 且有 `then`）不再倒地或硬直，已滿的計量歸零（規格 4.9）。部位優先序 belly > head > body > tail。
+- 大凶豺龍素材：`tools/extract_spec.json` 的 `jagras` 群組，三張圖 12 組動作（IDLE、WALK、JG01–04、INFLATE、DEFLATE、FLINCH、TOPPLE、GETUP、DEATH），0.6 倍面積平均縮放、16 色、去背後剝掉兩圈背景暈邊（`dehalo`）、只留主體（`keepMain`，去掉胃液、塵土、動作線）。輸出 `hooks/gen/jagras.ts`（約 273 KB）。IDLE 可見約 143×76，符合規格的 140×64 比例目標。
+- 間距：`bounds` 是推擠框（獵人身體不會進入），`torso` 是規格 3.3 判斷近／中／遠距用的軀幹寬（未設則用 `bounds`）。大凶豺龍頭部低，推擠框伸到下巴（`[-58, 46]`），膨腹時伸到腹部前緣（`mechanic.bounds` → `[-64, 46]`）；魔物前衝或變大時，獵人每 tick 被推回推擠框外。冰呪龍兩者相同，行為不變。
+- 大凶豺龍框：`collision-data.ts` 的 `JG_*`，以規格 3.4 灰盒值為起點，在 10px 格線上逐姿勢對齊擷取後的影格；`belly` 只出現在畫成膨腹的姿勢。
+- 模擬（20 個種子，`jagras.test.ts` 會印出）：校正 HP 967；中位 1.88 分（1.58–2.29）；力竭 0%；20 場共膨腹 43 次、腹部破壞 4 次；打中獵人：胃液 19、重壓 9、前咬 9、翻壓 1；每 tick p95 < 1ms。最大 SVG 約 86k 字元。
+
+需要你確認的解讀與已知差異：
+
+1. 規格「正常只選前咬與胃液團，膨腹才開放另外兩招」解讀為：膨腹時只出重壓與翻壓（前咬、胃液團的參考圖是正常體型，混用會穿幫）。
+2. 一般硬直／倒地沿用 70／200（規格要求先沿用）。大凶豺龍 HP 較低，20 場出現 144 次硬直、80 次倒地，偏多；正式平衡時再調。
+3. 膨腹中被一般硬直／倒地時，畫面用正常體型的 FLINCH／TOPPLE（參考包沒有膨腹版本）。
+4. 沿用 v0.2 的決定：不做掃掠 AABB；同招對同目標只結算一次（單一 group）。多 group 連段（轟龍、雷狼龍、迅龍怒後）要在後續魔物時擴充。
+5. ROAR、RUN、TURN、ENRAGE、EXHAUST、RETREAT 這次沒有擷取（大凶豺龍目前不觸發）。
+
 ## 待做（v2，依優先序）
 
 1. 太刀（L 系列）與弓（B 系列）：從 `images/04_longsword.png`、`05_bow.png` 擷取；這兩張板的格子裡畫了冰呪龍當距離參考，擷取時要排除。武器列目前畫在 SVG 裡且只有大劍可選；要改成營地內可切換的原生 Button，戰鬥中停用，並用 `pending_weapon` 在回營時套用。
 2. 特效分層（吐息、刀光、冰屑成為獨立資產）。
-3. 補中間影格；其餘 75 組動作；V29 死亡；其他魔物；S01 的使用。
+3. 補中間影格；其餘 75 組動作；V29 死亡。
+4. 其餘新增魔物，依規格順序：飛雷龍 → 蠻顎龍 → 冰牙龍 → 迅龍 → 轟龍 → 雷狼龍 → 殲世滅盡龍（需先擴充多 group 攻擊、固定地面危險區、怒氣，並製作 S05 場景）。
 
 ## 已知注意事項
 

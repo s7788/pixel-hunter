@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { HuntEvent, HuntPhase, HuntWorld } from '../types'
+import type { HuntEvent, HuntPhase, HuntWorld, MonsterId } from '../types'
 import { TICK_MS } from './data'
 import type { Game } from './engine'
-import { beginTurn, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, debugHunt, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { enabledMonsters } from './monsters/registry'
 import { HUNT_SIZE, huntSvg } from './svg'
 
 const PANE = 'hunt-8bit'
@@ -66,11 +67,12 @@ async function advance($: EngineInterface): Promise<void> {
   if (saved !== undefined) await save($, saved)
 }
 
-async function startTurn($: EngineInterface, label: string): Promise<void> {
+/** A turn (or the demo) starts; `monster` drops the hunt under way for a fresh one of that species (debug). */
+async function startTurn($: EngineInterface, label: string, monster?: MonsterId): Promise<void> {
   const now = await $.clock.now()
   await update($, turnStartedAt, () => now)
   await update($, phase, () => 'hunting')
-  await save($, await changeGame($, beginTurn))
+  await save($, await changeGame($, g => (monster === undefined ? beginTurn(g) : debugHunt(g, monster))))
   await note($, label)
 }
 
@@ -106,14 +108,18 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'hunt', description: 'Open the 8-bit hunt pane' })
-    await $.command.register({ name: 'hunt-demo', description: 'Toggle the hunt on or off without a Claude turn (debug)' })
+    await $.command.register({
+      name: 'hunt-demo',
+      description: 'Toggle the hunt on or off without a Claude turn; with a monster id, start a fresh hunt of it (debug)',
+      argumentHint: '[monster id]',
+    })
     const stored = (await $.store.get(SAVE_KEY)) as Game | undefined
     const open = await $.store.get(DEBUG_KEY)
     if (typeof open === 'boolean') await update($, debugOpen, () => open)
     const showBoxes = await $.store.get(BOXES_KEY)
     if (typeof showBoxes === 'boolean') await update($, boxesOpen, () => showBoxes)
     const now = await $.clock.now()
-    // a hot reload keeps the session's world (migrated if it predates collision); a new session restores the save
+    // a hot reload keeps the session's world (migrated if it predates collision or the registry); a new session restores the save
     await update($, world, w =>
       w !== null ? { ...w, game: migrate(w.game) } : { tick: 0, now, game: stored === undefined ? newGame(now) : restore(stored) },
     )
@@ -131,7 +137,15 @@ export const register: Register = on => {
     return { text: 'Hunt pane opened.' }
   })
 
-  on('command.run', { command: 'hunt-demo' }, async $ => {
+  on('command.run', { command: 'hunt-demo' }, async ($, e) => {
+    const wanted = e.args.trim()
+    if (wanted !== '') {
+      const monster = enabledMonsters().find(id => id === wanted)
+      if (monster === undefined) return { text: `Unknown monster "${wanted}". One of: ${enabledMonsters().join(', ')}.` }
+      await serial(() => startTurn($, `hunt-demo -> ${monster}`, monster))
+      await $.ui.open({ id: PANE, title: TITLE })
+      return { text: `Hunt demo: a fresh ${monster} hunt (the one under way was dropped).` }
+    }
     const isHunting = (await read($, phase)) === 'hunting'
     await serial(() => (isHunting ? finishTurn($, 'answer') : startTurn($, 'hunt-demo -> hunting')))
     await $.ui.open({ id: PANE, title: TITLE })
@@ -205,6 +219,14 @@ export const register: Register = on => {
               HP {g.hunter.hp} ST {g.hunter.stamina} / monster HP {view.monsterHpPercent ?? '-'}% / hunt #{g.huntNo} / slain{' '}
               {g.slain} / carts {g.carts}
             </Text>
+            {g.hunt !== null && (
+              <Text dimColor>
+                {g.hunt.monsterId} / state {g.hunt.state} {g.hunt.stateT} /{' '}
+                {Object.entries(g.hunt.parts)
+                  .map(([part, p]) => `${part} ${p.broken ? 'broken' : p.durability}`)
+                  .join(' ') || 'no parts'}
+              </Text>
+            )}
             <Text dimColor>
               svg {source.length} / 131072 chars / {e.surface} {e.props.placement} cols {e.props.bodyColumns}
             </Text>

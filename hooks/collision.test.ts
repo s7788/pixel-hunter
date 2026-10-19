@@ -2,7 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import { BOXES } from './collision-data'
 import { hitboxes, hurtboxes, overlaps, toWorld } from './collision'
-import { HUNTER, VELKHANA } from './data'
+import { HUNTER } from './data'
+import { MONSTERS, VELKHANA } from './monsters/registry'
 import type { Move } from './data'
 import { ACTIONS } from './sprites'
 import type { ActionId } from './sprites'
@@ -24,7 +25,7 @@ test('every action has valid boxes for each of its poses', () => {
 })
 
 test('the hit pose of each attack is the active pose in data.ts', () => {
-  const moves: Move[] = [...Object.values(HUNTER.moves), ...Object.values(VELKHANA.moves)]
+  const moves: Move[] = [...Object.values(HUNTER.moves), ...Object.values(MONSTERS).flatMap(def => Object.values(def!.moves))]
   for (const move of moves) expect(BOXES[move.action].hit?.pose).toBe(move.active)
 })
 

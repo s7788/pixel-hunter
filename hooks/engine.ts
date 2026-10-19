@@ -4,13 +4,18 @@ import type {
   HuntGame as Game,
   HunterMoveId as HunterMove,
   HuntMode as Mode,
+  HuntRun,
+  MonsterId,
   MonsterMoveId as MonsterMove,
 } from '../types'
-import type { Placement } from './collision'
-import { contactPart, hitboxes, hurtboxes, reaches } from './collision'
-import { MOVE_BOUNDS } from './collision-data'
+import type { Aabb, Placement } from './collision'
+import { contactPart, hitboxes, hurtboxes, reaches, shifted, toWorld, touchesAny } from './collision'
+import { BOXES, MOVE_BOUNDS } from './collision-data'
 import type { Move } from './data'
-import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS, VELKHANA } from './data'
+import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS } from './data'
+import { enabledMonsters, monsterDef, VELKHANA } from './monsters/registry'
+import type { MonsterCtx, MonsterDef, MonsterMove as MonsterMoveDef } from './monsters/types'
+import { RANGE_BANDS } from './monsters/types'
 import type { ActionId, SceneId } from './sprites'
 import { SCENES } from './sprites'
 
@@ -23,23 +28,41 @@ import { SCENES } from './sprites'
  * Damage lands only on contact: an attack's boxes on its active pose must
  * touch the target's hurt boxes that tick (hooks/collision.ts), and each
  * attack settles each target once.
+ *
+ * The monster is whichever species the hunt was drawn with (hooks/monsters):
+ * its moves, tuning and own mechanic come from that definition.
  */
 
 export type { Game }
 
 const hunterMove = (move: HunterMove): Move => HUNTER.moves[move]
-const monsterMove = (move: MonsterMove): Move => VELKHANA.moves[move]
 
-export type ActorView = { action: ActionId; frame: number; x: number; facing: 1 | -1 }
+/** The hunt's species; a hunt is always started with a registered one. */
+const defOf = (g: Game): MonsterDef => monsterDef(g.hunt!.monsterId)!
+const monsterMove = (g: Game, move: MonsterMove): MonsterMoveDef => defOf(g).moves[move]!
+const idleKey = (g: Game): MonsterMove => defOf(g).mechanic?.idleMove(g) ?? 'idle'
+const walkKey = (g: Game): MonsterMove => defOf(g).mechanic?.walkMove(g) ?? 'walk'
+/** Down on the ground: an opening that gets up again (never left for idle on retreat). */
+const isDown = (g: Game): boolean => {
+  const move = monsterMove(g, g.monster.move)
+  return move.opening === true && move.then !== undefined
+}
+
+/** `hitShift`: local pixels the live hit box has flown (a projectile), for the debug boxes. */
+export type ActorView = { action: ActionId; frame: number; x: number; facing: 1 | -1; hitShift?: number }
 
 export type View = {
   scene: SceneId
   hunter: ActorView
   monster: ActorView | null
+  /** The hunt's species for the HUD: name, kind, and its state when it has one to show. */
+  monsterInfo: { name: string; species: string; status: string | null } | null
   hp: number
   stamina: number
   label: string
   monsterHpPercent: number | null
+  /** Effects drawn on live hit boxes (a projectile in flight). */
+  effects: { fx: 'spit'; box: Aabb }[]
   /** Debug: where recent hits met (the last MARK_TICKS ticks). */
   marks: { x: number; y: number; outcome: Outcome }[]
   /** Camp props: the fire's flicker frame, and the meat on the spit (0 raw .. 1 done; null while eaten). */
@@ -65,13 +88,20 @@ export function poseAt(move: Move, t: number): number {
 
 const loopPose = (move: Move, t: number): number => poseAt(move, t % sum(move.ticks))
 const isOver = (move: Move, t: number): boolean => t >= sum(move.ticks)
+/** First tick of the active pose, and the tick after it. */
+const activeSpan = (move: Move): [number, number] => {
+  const start = sum(move.ticks.slice(0, move.active ?? 0))
+  return [start, start + (move.ticks[move.active ?? 0] ?? 0)]
+}
 
-const SAVE_SCHEMA = 2
+const SAVE_SCHEMA = 3
 const SCENE_SCALE = 3
 const HITS_KEPT = 30
 const MARK_TICKS = 8
-const LOOPING = new Set<string>(['idle', 'run', 'walk'])
-const poseOf = (key: string, move: Move, t: number): number => (LOOPING.has(key) ? loopPose(move, t) : poseAt(move, t))
+const HUNTER_LOOPING = new Set<string>(['idle', 'run', 'walk'])
+const hunterPoseOf = (key: string, move: Move, t: number): number =>
+  HUNTER_LOOPING.has(key) ? loopPose(move, t) : poseAt(move, t)
+const monsterPoseOf = (move: MonsterMoveDef, t: number): number => (move.loop === true ? loopPose(move, t) : poseAt(move, t))
 
 /** mulberry32 over the state's seed. */
 function rand(g: Game): number {
@@ -131,28 +161,65 @@ export function newGame(seed: number): Game {
   }
 }
 
-/** Monster HP that lasts about `targetMinutes` of hunting, from a fixed-seed run. */
-let calibrated: number | undefined
-export function monsterHpForTarget(): number {
-  if (calibrated === undefined) {
-    let g = newGame(20261016)
-    startHunt(g, 1e9)
-    g = beginTurn(g)
-    const ticks = 6000
-    for (let i = 0; i < ticks; i += 1) g = step(g, true)
-    const perTick = (1e9 - g.hunt!.monsterHp) / ticks
-    // no hit landed: a box or stance is off; never make a monster with no HP
-    if (!(perTick > 0)) throw new Error('hunt-8bit: calibration landed no hits; check the collision boxes and stances')
-    calibrated = Math.round(perTick * ((VELKHANA.targetMinutes * 60_000) / TICK_MS))
+/**
+ * Monster HP that lasts about the species' `targetMinutes` of hunting, from a
+ * fixed-seed run against an unkillable one. A species whose parts scale with
+ * max HP runs a second pass at the first estimate, so its breaks happen.
+ */
+const calibrated = new Map<MonsterId, number>()
+export function monsterHpForTarget(id: MonsterId): number {
+  let hp = calibrated.get(id)
+  if (hp === undefined) {
+    const def = monsterDef(id)!
+    const pass = (maxHp: number): number => {
+      let g = newGame(20261016)
+      startHunt(g, id, 1e9, maxHp)
+      g = beginTurn(g)
+      const ticks = 6000
+      for (let i = 0; i < ticks; i += 1) g = step(g, true)
+      const perTick = (1e9 - g.hunt!.monsterHp) / ticks
+      // no hit landed: a box or stance is off; never make a monster with no HP
+      if (!(perTick > 0)) throw new Error(`hunt-8bit: calibration of ${id} landed no hits; check the collision boxes and stances`)
+      return Math.round(perTick * ((def.targetMinutes * 60_000) / TICK_MS))
+    }
+    hp = pass(1e9)
+    if (def.calibrateTwice === true) hp = pass(hp)
+    calibrated.set(id, hp)
   }
-  return calibrated
+  return hp
 }
 
-function startHunt(g: Game, hp: number = monsterHpForTarget()): void {
-  const scene = VELKHANA.scenes[g.huntNo % VELKHANA.scenes.length]!
-  g.hunt = { scene, monsterHp: hp, monsterHpMax: hp, stagger: 0, topple: 0, fightTicks: 0, isFresh: true }
+/** The species of a new hunt: an enabled one, from the seed (the draw leaves the seed as it is). */
+function drawMonster(g: Game): MonsterId {
+  const pool = enabledMonsters()
+  const mixed = Math.imul(g.seed ^ Math.imul(g.huntNo + 1, 0x9e3779b1), 0x85ebca6b) >>> 0
+  return pool[mixed % pool.length]!
+}
+
+function startHunt(g: Game, id: MonsterId = drawMonster(g), hp: number = monsterHpForTarget(id), maxHp: number = hp): void {
+  const def = monsterDef(id)!
+  const scene = def.scenes[g.huntNo % def.scenes.length]!
+  const own = def.mechanic?.initial(maxHp) ?? { state: 'normal', parts: {} }
+  g.hunt = {
+    monsterId: id,
+    definitionVersion: def.definitionVersion,
+    scene,
+    monsterHp: hp,
+    monsterHpMax: maxHp,
+    stagger: 0,
+    topple: 0,
+    fightTicks: 0,
+    isFresh: true,
+    state: own.state,
+    stateT: 0,
+    parts: own.parts,
+    cooldowns: {},
+  }
   g.huntNo += 1
 }
+
+/** The saved hunt's species is registered: otherwise it waits at camp, kept as it was. */
+const isReady = (g: Game): boolean => g.hunt === null || monsterDef(g.hunt.monsterId) !== undefined
 
 function setMode(g: Game, mode: Mode): void {
   g.mode = mode
@@ -177,19 +244,40 @@ function hunterDo(g: Game, move: HunterMove): void {
 function monsterDo(g: Game, move: MonsterMove): void {
   g.monster.move = move
   g.monster.t = 0
-  g.monster.attack = startAttack(g, 'monster', monsterMove(move))
+  g.monster.attack = startAttack(g, 'monster', monsterMove(g, move))
 }
 
-/** A main turn started: leave camp (new hunt or the saved one). */
-export function beginTurn(game: Game): Game {
+const ctxOf = (g: Game): MonsterCtx => ({ g, act: move => monsterDo(g, move), say: text => say(g, text) })
+
+function leaveCamp(g: Game, monster?: MonsterId): void {
+  if (g.hunt === null) startHunt(g, monster)
+  if (!isReady(g)) {
+    say(g, '魔物資料未就緒')
+    return
+  }
+  setMode(g, 'leaving')
+  g.hunter.facing = 1
+  hunterDo(g, 'run')
+}
+
+/** A main turn started: leave camp (new hunt or the saved one). `monster` picks the species of a new hunt (tests, calibration). */
+export function beginTurn(game: Game, monster?: MonsterId): Game {
   const g = clone(game)
   g.isResting = false
-  if (g.mode === 'camp') {
-    if (g.hunt === null) startHunt(g)
-    setMode(g, 'leaving')
-    g.hunter.facing = 1
-    hunterDo(g, 'run')
-  }
+  if (g.mode === 'camp') leaveCamp(g, monster)
+  return g
+}
+
+/**
+ * Debug (`/hunt-demo <monsterId>`): drop the hunt under way and head out at
+ * once after a fresh one of this species. Tallies and the seed stay.
+ */
+export function debugHunt(game: Game, monster: MonsterId): Game {
+  const g = clone(game)
+  if (g.mode !== 'camp') toCamp(g)
+  g.hunt = null
+  g.isResting = false
+  leaveCamp(g, monster)
   return g
 }
 
@@ -202,7 +290,7 @@ export function endTurn(game: Game): Game {
     g.hunter.intent = null
     g.hunter.rollIn = -1
     hunterDo(g, 'run')
-    if (g.monster.move !== 'topple') monsterDo(g, 'idle')
+    if (!isDown(g)) monsterDo(g, idleKey(g))
     say(g, '撤退')
   } else if (g.mode === 'leaving') {
     toCamp(g)
@@ -210,14 +298,32 @@ export function endTurn(game: Game): Game {
   return g
 }
 
+/** The fields a hunt saved before the registry lacks: it was Velkhana, in no state of its own. */
+function upgradeHunt(hunt: HuntRun): HuntRun {
+  return {
+    ...hunt,
+    monsterId: hunt.monsterId ?? 'velkhana',
+    definitionVersion: hunt.definitionVersion ?? 1,
+    state: hunt.state ?? 'normal',
+    stateT: hunt.stateT ?? 0,
+    parts: hunt.parts ?? {},
+    cooldowns: hunt.cooldowns ?? {},
+  }
+}
+
 /**
- * A game from before collision (no schema 2): attacks under way had no contact
- * record, so they are dropped and the hunter goes back to camp; the hunt's HP,
- * seed and tallies stay. A current game comes back unchanged.
+ * An older save. Before collision (no schema 2) attacks under way had no
+ * contact record, so they are dropped and the hunter goes back to camp; the
+ * hunt's HP, seed and tallies stay. Before the registry (schema 2) the hunt
+ * was Velkhana and gains its species fields, nothing else changes. A current
+ * game comes back unchanged.
  */
 export function migrate(saved: Game): Game {
   if (saved.saveSchemaVersion === SAVE_SCHEMA) return saved
   const old = clone(saved)
+  if (old.saveSchemaVersion === 2) {
+    return { ...old, saveSchemaVersion: SAVE_SCHEMA, hunt: old.hunt === null ? null : upgradeHunt(old.hunt) }
+  }
   const g: Game = {
     ...old,
     saveSchemaVersion: SAVE_SCHEMA,
@@ -225,6 +331,7 @@ export function migrate(saved: Game): Game {
     nextAttackSerial: 0,
     lastOutcome: null,
     hits: [],
+    hunt: old.hunt === null ? null : upgradeHunt(old.hunt),
     hunter: { ...old.hunter, attack: null, intent: null, rollIn: -1, dodgeFor: null },
     monster: { ...old.monster, attack: null },
   }
@@ -276,40 +383,39 @@ export function step(game: Game, working: boolean): Game {
   g.monster.t += 1
   switch (g.mode) {
     case 'camp':
-      if (working && !g.isResting && g.modeT >= CAMP_DELAY) {
-        if (g.hunt === null) startHunt(g)
-        setMode(g, 'leaving')
-        g.hunter.facing = 1
-        hunterDo(g, 'run')
-      } else campRest(g)
+      if (working && !g.isResting && g.modeT >= CAMP_DELAY && isReady(g)) leaveCamp(g)
+      else campRest(g)
       break
-    case 'leaving':
+    case 'leaving': {
       // from wherever the hunter was resting, off the right edge in RUN_TICKS
       g.hunter.x += (420 - g.hunter.x) / Math.max(1, RUN_TICKS - g.modeT + 1)
       if (g.modeT >= RUN_TICKS) {
+        const def = defOf(g)
         setMode(g, 'arriving')
         g.hunter.x = -40
         if (g.hunt!.isFresh) {
-          g.monster = { move: 'walk', t: 0, x: VELKHANA.enterFromX, wait: 0, attack: null }
+          g.monster = { move: walkKey(g), t: 0, x: def.enterFromX, wait: 0, attack: null }
         } else {
-          g.monster = { move: 'idle', t: 0, x: g.monster.x, wait: between(g, VELKHANA.idleTicks), attack: null }
+          g.monster = { move: idleKey(g), t: 0, x: g.monster.x, wait: between(g, def.idleTicks), attack: null }
         }
       }
       break
+    }
     case 'arriving': {
+      const def = defOf(g)
       const span = g.hunt!.isFresh ? RUN_TICKS * 2 : RUN_TICKS
       g.hunter.x = Math.min(HUNTER.x, hunterMaxX(g), -40 + ((HUNTER.x + 40) * g.modeT) / RUN_TICKS)
-      if (g.hunt!.isFresh) g.monster.x = VELKHANA.enterFromX + ((VELKHANA.x - VELKHANA.enterFromX) * g.modeT) / span
+      if (g.hunt!.isFresh) g.monster.x = def.enterFromX + ((def.x - def.enterFromX) * g.modeT) / span
       if (g.modeT >= RUN_TICKS && g.hunter.move === 'run') {
         hunterDo(g, 'idle')
         g.hunter.wait = between(g, HUNTER.idleTicks)
       }
       if (g.modeT >= span) {
         g.monster = {
-          move: 'idle',
+          move: idleKey(g),
           t: 0,
-          x: g.hunt!.isFresh ? VELKHANA.x : g.monster.x,
-          wait: between(g, VELKHANA.idleTicks),
+          x: g.hunt!.isFresh ? def.x : g.monster.x,
+          wait: between(g, def.idleTicks),
           attack: null,
         }
         g.hunt!.isFresh = false
@@ -355,17 +461,45 @@ const hunterAt = (g: Game): Placement => ({ x: g.hunter.x, groundY: groundOf(g),
 const monsterAt = (g: Game): Placement => ({ x: g.monster.x, groundY: groundOf(g), renderFlip: 1 })
 const hunterPose = (g: Game): [ActionId, number] => {
   const move = hunterMove(g.hunter.move)
-  return [move.action, poseOf(g.hunter.move, move, g.hunter.t)]
+  return [move.action, hunterPoseOf(g.hunter.move, move, g.hunter.t)]
 }
 const monsterPose = (g: Game): [ActionId, number] => {
-  const move = monsterMove(g.monster.move)
-  return [move.action, poseOf(g.monster.move, move, g.monster.t)]
+  const move = monsterMove(g, g.monster.move)
+  return [move.action, monsterPoseOf(move, g.monster.t)]
 }
 
-/** The bodies never overlap: the hunter stays left of the monster's body. */
-const hunterMaxX = (g: Game): number => g.monster.x + MOVE_BOUNDS.monster[0] - MOVE_BOUNDS.hunter[1] - BODY_GAP
+/** The monster's push box now (its state may widen it). */
+const pushBox = (g: Game): readonly [number, number] => defOf(g).mechanic?.bounds?.(g) ?? defOf(g).bounds
+
+/** The bodies never overlap: the hunter stays left of the monster's push box. */
+const hunterMaxX = (g: Game): number => g.monster.x + pushBox(g)[0] - MOVE_BOUNDS.hunter[1] - BODY_GAP
 const monsterMinX = (g: Game): number =>
-  Math.max(VELKHANA.minX, g.hunter.x + MOVE_BOUNDS.hunter[1] - MOVE_BOUNDS.monster[0] + BODY_GAP)
+  Math.max(defOf(g).minX, g.hunter.x + MOVE_BOUNDS.hunter[1] - pushBox(g)[0] + BODY_GAP)
+
+/** Local pixels a projectile has flown forward by this tick of its move (forward = the art's facing). */
+function flight(g: Game, move: MonsterMoveDef, t: number): number {
+  if (move.travel === undefined) return 0
+  return defOf(g).assetFacing * move.travel * Math.max(0, t - activeSpan(move)[0])
+}
+
+/** The monster's live hit boxes this tick (a projectile where it has flown to). */
+function monsterHits(g: Game): Aabb[] {
+  const move = monsterMove(g, g.monster.move)
+  const [action, pose] = monsterPose(g)
+  return hitboxes(action, pose, monsterAt(g), flight(g, move, g.monster.t))
+}
+
+/** Everywhere this monster attack could land from where it stands: lunge and flight included. */
+function monsterReach(g: Game, key: MonsterMove): Aabb[] {
+  const move = monsterMove(g, key)
+  const [start, end] = activeSpan(move)
+  const forward = (move.advance ?? 0) + (move.travel ?? 0) * Math.max(0, end - start - 1)
+  const along = defOf(g).assetFacing * forward
+  return (BOXES[move.action].hit?.boxes ?? []).flatMap(b => {
+    const [x0, y0, x1, y1] = shifted(b, along)
+    return [toWorld(forward === 0 ? b : [Math.min(b[0], x0), y0, Math.max(b[2], x1), y1], monsterAt(g))]
+  })
+}
 
 const isInvulnerable = (g: Game): boolean =>
   g.hunter.move === 'roll' && (HUNTER.rollInvulnerable as readonly number[]).includes(poseAt(HUNTER.moves.roll, g.hunter.t))
@@ -380,7 +514,7 @@ function findContacts(g: Game): Contact[] {
   const m = g.monster
   const h = g.hunter
   if (m.attack !== null && !m.attack.contacts.some(c => c.target === 'hunter')) {
-    const touch = contactPart(hitboxes(mAction, mPose, monsterAt(g)), hurtboxes(hAction, hPose, hunterAt(g)))
+    const touch = contactPart(monsterHits(g), hurtboxes(hAction, hPose, hunterAt(g)))
     if (touch !== undefined) {
       const evaded = isInvulnerable(g)
       out.push({
@@ -389,7 +523,7 @@ function findContacts(g: Game): Contact[] {
         part: touch.part,
         ...touch.point,
         outcome: evaded ? 'evaded' : 'damaged',
-        damage: evaded ? 0 : monsterMove(m.move).damage ?? 0,
+        damage: evaded ? 0 : monsterMove(g, m.move).damage ?? 0,
       })
     }
   }
@@ -409,6 +543,7 @@ function findContacts(g: Game): Contact[] {
 function settle(g: Game): boolean {
   const found = findContacts(g)
   if (found.length === 0) return false
+  const def = defOf(g)
   const hunt = g.hunt!
   const h = g.hunter
   const m = g.monster
@@ -435,7 +570,7 @@ function settle(g: Game): boolean {
     g.lastOutcome = hunterFell ? 'mutual_ko' : null
     if (hunterFell) g.carts += 1
     setMode(g, 'slain')
-    monsterDo(g, 'topple')
+    monsterDo(g, def.slainMove)
     hunterDo(g, hunterFell ? 'down' : 'idle')
     h.rollIn = -1
     h.intent = null
@@ -448,7 +583,7 @@ function settle(g: Game): boolean {
     hunterDo(g, 'down')
     h.rollIn = -1
     h.intent = null
-    if (m.move !== 'topple') monsterDo(g, 'idle')
+    if (!isDown(g)) monsterDo(g, idleKey(g))
     say(g, '力竭…回營')
     return true
   }
@@ -457,50 +592,68 @@ function settle(g: Game): boolean {
     h.facing = 1
     h.rollIn = -1
     h.intent = null
-    say(g, monsterAttack === 'iceBeam' ? '被冰吐息擊中' : '被尾刺擊中')
+    say(g, monsterMove(g, monsterAttack).hitLabel ?? '被擊中')
   } else if (found.some(c => c.outcome === 'evaded')) {
     say(g, '翻滾閃避')
   }
   if (toMonster > 0) {
-    if (hunt.topple >= VELKHANA.toppleEvery) {
+    // the species' own reaction (a part broke) wins over a flinch or topple; a filled meter is spent with it
+    let tookOver = false
+    for (const c of found) if (c.source === 'hunter' && c.damage > 0 && def.mechanic?.damaged(ctxOf(g), c.part, c.damage) === true) tookOver = true
+    if (tookOver) {
+      if (hunt.topple >= def.toppleEvery) hunt.topple = 0
+      if (hunt.stagger >= def.flinchEvery) hunt.stagger = 0
+    } else if (hunt.topple >= def.toppleEvery && !isDown(g)) {
       hunt.topple = 0
       hunt.stagger = 0
       monsterDo(g, 'topple')
-      say(g, '冰呪龍倒地')
-    } else if (hunt.stagger >= VELKHANA.flinchEvery && m.move !== 'topple' && m.move !== 'getup') {
+      say(g, `${def.name}倒地`)
+    } else if (hunt.stagger >= def.flinchEvery && !isDown(g) && m.move !== 'getup') {
       hunt.stagger = 0
       monsterDo(g, 'flinch')
-      say(g, '冰呪龍硬直')
+      say(g, `${def.name}硬直`)
     }
   }
   return false
 }
 
 function fight(g: Game): void {
+  const def = defOf(g)
   const hunt = g.hunt!
   const h = g.hunter
   const m = g.monster
   hunt.fightTicks += 1
+  hunt.stateT += 1
   if (settle(g)) return
 
-  // monster: finish moves, walk in, then decide
-  const mNow: Move = monsterMove(m.move)
-  if (m.move !== 'idle' && m.move !== 'walk' && isOver(mNow, m.t)) {
-    if (m.move === 'topple') monsterDo(g, 'getup')
+  // monster: finish moves, lunge, walk in, then decide
+  const mNow = monsterMove(g, m.move)
+  const idle = idleKey(g)
+  const walk = walkKey(g)
+  if (mNow.advance !== undefined && monsterPoseOf(mNow, m.t) === mNow.active) {
+    const [start, end] = activeSpan(mNow)
+    m.x = Math.max(monsterMinX(g), m.x + (def.assetFacing * mNow.advance) / Math.max(1, end - start))
+  }
+  if (m.move !== idle && m.move !== walk && isOver(mNow, m.t)) {
+    if (mNow.then !== undefined) monsterDo(g, mNow.then)
     else {
-      monsterDo(g, 'idle')
-      m.wait = between(g, VELKHANA.idleTicks)
+      monsterDo(g, idleKey(g))
+      m.wait = between(g, def.idleTicks)
     }
-  } else if (m.move === 'walk') {
-    const next = Math.max(monsterMinX(g), m.x - VELKHANA.walkStep / sum(mNow.ticks))
+  } else if (m.move === walk) {
+    const speed = def.mechanic?.speed(g) ?? 1
+    const next = Math.max(monsterMinX(g), m.x - (def.walkStep * speed) / sum(mNow.ticks))
     if (isOver(mNow, m.t) || next >= m.x) {
-      monsterDo(g, 'idle')
-      m.wait = between(g, VELKHANA.idleTicks)
+      monsterDo(g, idle)
+      m.wait = between(g, def.idleTicks)
     } else m.x = next
-  } else if (m.move === 'idle') {
+  } else if (m.move === idle) {
     m.wait -= 1
     if (m.wait <= 0) monsterDecide(g)
   }
+
+  // a lunge or a state that widens the monster pushes the hunter back, never through it
+  if (h.x > hunterMaxX(g)) h.x = Math.max(HUNTER.minX, hunterMaxX(g))
 
   // hunter: finish moves, roll travel, pending dodge, run in, regen, then decide
   const hNow: Move = hunterMove(h.move)
@@ -544,8 +697,7 @@ function hunterReaches(g: Game, move: HunterMove): boolean {
 
 function hunterDecide(g: Game): void {
   const h = g.hunter
-  const m = g.monster
-  const opening = m.move === 'flinch' || m.move === 'topple'
+  const opening = monsterMove(g, g.monster.move).opening === true
   let choice: HunterMove | 'wait'
   if (opening) choice = can(g, 'trueCharge') ? 'trueCharge' : can(g, 'charge') ? 'charge' : can(g, 'tackle') ? 'tackle' : 'wait'
   else {
@@ -596,34 +748,69 @@ function runIn(g: Game): void {
   } else h.x = next
 }
 
-/** Attack only with what reaches the hunter now; otherwise walk in, or wait. */
+/** Horizontal gap between the hunter's body and the monster's torso (negative when they would overlap). */
+const bodyGap = (g: Game): number => g.monster.x + (defOf(g).torso ?? defOf(g).bounds)[0] - (g.hunter.x + MOVE_BOUNDS.hunter[1])
+
+/** A band test: near takes anything closer than its far edge; mid and far are [from, to). */
+function inRange(g: Game, ranges: readonly ('near' | 'mid' | 'far')[]): boolean {
+  const gap = bodyGap(g)
+  return ranges.some(r => {
+    const [from, to] = RANGE_BANDS[r]
+    return (r === 'near' || gap >= from) && (r === 'far' ? gap <= to : gap < to)
+  })
+}
+
+/** The move fits the species' state, its own rules, and is off cooldown. */
+function isAllowed(g: Game, key: MonsterMove): boolean {
+  const move = monsterMove(g, key)
+  const hunt = g.hunt!
+  if (move.state !== undefined && move.state !== hunt.state) return false
+  if (defOf(g).mechanic?.allows(g, key) === false) return false
+  return (hunt.cooldowns[key] ?? 0) <= hunt.fightTicks
+}
+
+/**
+ * A safe decision point. The species' mechanic may act first (a state
+ * change); otherwise it attacks with what may be chosen now: by its decision
+ * band, or, for moves with none, only when its boxes would reach. With nothing
+ * to throw it walks in, or waits.
+ */
 function monsterDecide(g: Game): void {
+  const def = defOf(g)
   const m = g.monster
+  if (def.mechanic?.decide(ctxOf(g)) === true) return
   const [hAction, hPose] = hunterPose(g)
   const options: [MonsterMove, number][] = []
-  for (const move of ['tailStab', 'iceBeam'] as const) {
-    if (reaches(monsterMove(move).action, monsterAt(g), hAction, hPose, hunterAt(g))) options.push([move, VELKHANA.moves[move].weight])
+  for (const key of def.attacks) {
+    if (!isAllowed(g, key)) continue
+    const move = monsterMove(g, key)
+    const fits = move.range !== undefined ? inRange(g, move.range) : touchesAny(monsterReach(g, key), hAction, hPose, hunterAt(g))
+    if (fits) options.push([key, move.weight ?? 1])
   }
+  const walk = walkKey(g)
+  if (options.length > 0 && def.approachWeight !== undefined && m.x > monsterMinX(g)) options.push([walk, def.approachWeight])
   if (options.length === 0) {
-    if (m.x > monsterMinX(g)) monsterDo(g, 'walk')
-    else m.wait = between(g, VELKHANA.idleTicks)
+    if (m.x > monsterMinX(g)) monsterDo(g, walk)
+    else m.wait = between(g, def.idleTicks)
     return
   }
-  const move = pick(g, options)
-  monsterDo(g, move)
-  say(g, move === 'iceBeam' ? '冰吐息' : '尾刺')
+  const key = pick(g, options)
+  monsterDo(g, key)
+  if (key === walk) return
+  const move = monsterMove(g, key)
+  if (move.cooldown !== undefined) g.hunt!.cooldowns[key] = g.hunt!.fightTicks + sum(move.ticks) + move.cooldown
+  if (move.label !== undefined) say(g, move.label)
 }
 
 /** Ticks until the monster's attack can first touch, while it can still touch; null when no threat. */
 function threat(g: Game): number | null {
   const m = g.monster
-  const move = monsterMove(m.move)
+  const move = monsterMove(g, m.move)
   if (m.attack === null || move.active === undefined || m.attack.contacts.some(c => c.target === 'hunter')) return null
-  const start = sum(move.ticks.slice(0, move.active))
-  const end = start + (move.ticks[move.active] ?? 0)
+  const [start, end] = activeSpan(move)
   if (m.t >= end) return null
   const [hAction, hPose] = hunterPose(g)
-  return reaches(move.action, monsterAt(g), hAction, hPose, hunterAt(g)) ? Math.max(0, start - m.t) : null
+  return touchesAny(monsterReach(g, m.move), hAction, hPose, hunterAt(g)) ? Math.max(0, start - m.t) : null
 }
 
 /**
@@ -668,9 +855,9 @@ function stopBackingOff(g: Game): void {
   g.hunter.wait = between(g, HUNTER.idleTicks)
 }
 
-const actorView = (move: Move, a: { t: number; x: number }, facing: 1 | -1, loop: boolean): ActorView => ({
+const actorView = (move: Move, frame: number, a: { x: number }, facing: 1 | -1): ActorView => ({
   action: move.action,
-  frame: loop ? loopPose(move, a.t) : poseAt(move, a.t),
+  frame,
   x: Math.round(a.x),
   facing,
 })
@@ -678,14 +865,22 @@ const actorView = (move: Move, a: { t: number; x: number }, facing: 1 | -1, loop
 export function viewOf(g: Game): View {
   const inCamp = g.mode === 'camp' || g.mode === 'leaving'
   const h = g.hunter
+  const def = g.hunt === null ? undefined : monsterDef(g.hunt.monsterId)
+  const shown = !inCamp && g.hunt !== null && def !== undefined
+  const mMove = shown ? monsterMove(g, g.monster.move) : undefined
   return {
     scene: inCamp || g.hunt === null ? CAMP_SCENE : g.hunt.scene,
-    hunter: actorView(hunterMove(h.move), h, h.facing, LOOPING.has(h.move)),
-    monster: inCamp || g.hunt === null ? null : actorView(monsterMove(g.monster.move), g.monster, 1, LOOPING.has(g.monster.move)),
+    hunter: actorView(hunterMove(h.move), hunterPoseOf(h.move, hunterMove(h.move), h.t), h, h.facing),
+    monster:
+      mMove === undefined
+        ? null
+        : { ...actorView(mMove, monsterPoseOf(mMove, g.monster.t), g.monster, 1), hitShift: flight(g, mMove, g.monster.t) },
+    monsterInfo: def === undefined || inCamp ? null : { name: def.name, species: def.species, status: def.mechanic?.status(g) ?? null },
     hp: h.hp,
     stamina: h.stamina,
     label: g.labelT < LABEL_TICKS ? g.label : '',
     monsterHpPercent: g.hunt === null ? null : Math.round((100 * g.hunt.monsterHp) / g.hunt.monsterHpMax),
+    effects: mMove?.fx === undefined || g.mode !== 'fight' ? [] : monsterHits(g).map(box => ({ fx: mMove.fx!, box })),
     marks: inCamp
       ? []
       : g.hits.flatMap(hit =>

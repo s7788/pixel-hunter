@@ -29,10 +29,13 @@ export function hurtboxes(action: ActionId, pose: number, at: Placement): Placed
   return (Object.entries(set) as [Part, LocalBox][]).map(([part, box]) => ({ part, box: toWorld(box, at) }))
 }
 
-/** The attack's boxes on this pose; empty off its active pose. */
-export function hitboxes(action: ActionId, pose: number, at: Placement): Aabb[] {
+/** A local box moved `dx` pixels along the local x axis. */
+export const shifted = ([x0, y0, x1, y1]: LocalBox, dx: number): LocalBox => [x0 + dx, y0, x1 + dx, y1]
+
+/** The attack's boxes on this pose, moved `dx` local pixels (a projectile in flight); empty off its active pose. */
+export function hitboxes(action: ActionId, pose: number, at: Placement, dx = 0): Aabb[] {
   const hit = BOXES[action].hit
-  return hit === undefined || hit.pose !== pose ? [] : hit.boxes.map(b => toWorld(b, at))
+  return hit === undefined || hit.pose !== pose ? [] : hit.boxes.map(b => toWorld(dx === 0 ? b : shifted(b, dx), at))
 }
 
 /** Every box of an attack action regardless of pose, for the wind-up preview. */
@@ -44,11 +47,17 @@ export const activePose = (action: ActionId): number | undefined => BOXES[action
 
 /** Would this attack, thrown from here, touch the target as it stands now? */
 export function reaches(attack: ActionId, from: Placement, target: ActionId, pose: number, at: Placement): boolean {
-  const hurt = hurtboxes(target, pose, at)
-  return attackReach(attack, from).some(a => hurt.some(h => overlaps(a, h.box)))
+  return touchesAny(attackReach(attack, from), target, pose, at)
 }
 
-const PRIORITY: Record<Part, number> = { hunter_body: 0, head: 0, body: 1, tail: 2 }
+/** Do any of these (world) boxes touch the target as it stands now? */
+export function touchesAny(boxes: Aabb[], target: ActionId, pose: number, at: Placement): boolean {
+  const hurt = hurtboxes(target, pose, at)
+  return boxes.some(a => hurt.some(h => overlaps(a, h.box)))
+}
+
+/** Special parts first, then head, body, tail (spec 4.9). */
+const PRIORITY: Record<Part, number> = { belly: -1, hunter_body: 0, head: 0, body: 1, tail: 2 }
 
 export type Touch = { part: Part; point: { x: number; y: number } }
 

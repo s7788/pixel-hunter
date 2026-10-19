@@ -16,7 +16,11 @@ export type HunterMoveId =
   | 'walk'
   | 'roast'
   | 'eat'
-export type MonsterMoveId = 'idle' | 'walk' | 'tailStab' | 'iceBeam' | 'flinch' | 'topple' | 'getup'
+/** A monster's move key; each monster definition (hooks/monsters) names its own. */
+export type MonsterMoveId = string
+
+/** Registered monster species (hooks/monsters/registry.ts). */
+export type MonsterId = 'velkhana' | 'great_jagras'
 
 /** The state machine's place: at camp, travelling, fighting, or leaving a fight. */
 export type HuntMode = 'camp' | 'leaving' | 'arriving' | 'fight' | 'retreating' | 'carted' | 'slain'
@@ -45,6 +49,9 @@ export type HuntActor<M extends string> = { move: M; t: number; x: number; wait:
 
 /** One hunt against the monster; kept across turns and sessions until slain. */
 export type HuntRun = {
+  /** Fixed for the whole hunt; saves from before schema 3 are Velkhana. */
+  monsterId: MonsterId
+  definitionVersion: number
   scene: HuntSceneId
   monsterHp: number
   monsterHpMax: number
@@ -52,10 +59,17 @@ export type HuntRun = {
   topple: number
   fightTicks: number
   isFresh: boolean
+  /** The species' own state (e.g. 'inflated') and its age in fight ticks. */
+  state: string
+  stateT: number
+  /** Durability of breakable parts, from the actual hits on them. */
+  parts: Record<string, { durability: number; broken: boolean }>
+  /** Fight tick from which each attack may be chosen again. */
+  cooldowns: Record<string, number>
 }
 
 export type HuntGame = {
-  /** 2 since collision; older saves are migrated (attacks under way dropped). */
+  /** 3 since the monster registry; older saves are migrated (Velkhana, HP kept). */
   saveSchemaVersion: number
   /** Simulation ticks (125 ms each); moves only when the game steps, never while paused. */
   simTick: number
