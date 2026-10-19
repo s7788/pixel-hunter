@@ -12,6 +12,9 @@ import type { SceneId } from '../sprites'
 export type Range = 'near' | 'mid' | 'far'
 export const RANGE_BANDS: Readonly<Record<Range, readonly [number, number]>> = { near: [0, 32], mid: [32, 96], far: [96, 160] }
 
+/** Effects drawn by the mod on live hit boxes; `mark` is a dive's locked landing spot. */
+export type Fx = 'spit' | 'flame' | 'tornado' | 'spikes' | 'mark'
+
 export type MonsterMove = Move & {
   /** Shown when the move starts. */
   label?: string
@@ -19,6 +22,11 @@ export type MonsterMove = Move & {
   hitLabel?: string
   /** Pixels the root moves forward, spread over the active pose; stops at the hunter's body. */
   advance?: number
+  /**
+   * A leap: [tick, y] keys of the root's height (negative = up), linear between
+   * them and 0 outside; the drawing and every box follow it (spec 3.3).
+   */
+  lift?: readonly (readonly [number, number])[]
   /** A projectile: pixels per tick its hit box flies forward from the active pose's first tick. */
   travel?: number
   /** Decision bands it may be chosen in; without them, only when its boxes would reach. */
@@ -34,7 +42,27 @@ export type MonsterMove = Move & {
   /** Idle and walk moves loop their poses; every other move plays once. */
   loop?: boolean
   /** An effect drawn on the live hit box (kept out of the monster's frames). */
-  fx?: 'spit'
+  fx?: Fx
+  /**
+   * A combo: the sprite frame each tick segment shows (default: segment i shows
+   * frame i), so key poses can repeat or come from a combo board.
+   */
+  frames?: readonly number[]
+  /**
+   * Every active segment, each its own attack group (a fresh contact record, so
+   * each may land once); default `[active]`. `active` stays the first.
+   */
+  actives?: readonly number[]
+  /** Segments where the monster faces the other way as drawn: it moves backwards and its push box mirrors. */
+  turned?: readonly number[]
+  /** Projectile spread: vertical pixels per tick for each hit box (one volley, one group). */
+  spread?: readonly number[]
+  /** A dive: at this tick the landing spot is locked (the nearest legal spot to the hunter), then never follows. */
+  seek?: number
+  /** A ground hazard placed ahead: chosen only when all its boxes fit the arena. */
+  hazard?: boolean
+  /** From this tick on the move is an opening for the hunter (e.g. a tail stuck in the ground). */
+  openFrom?: number
 }
 
 /** The engine's hands, lent to a mechanic so it never imports the engine. */
@@ -55,8 +83,12 @@ export type Mechanic = {
   speed(g: Game): number
   /** The push box for the current state, when it differs from the species' own (e.g. an inflated belly). */
   bounds?(g: Game): readonly [number, number]
+  /** Every fight tick, after the contacts settled and before the monster moves on (e.g. a move just finished). */
+  tick?(c: MonsterCtx): void
   /** At a safe decision point (monster idle, wait over): true when it started a move. */
   decide(c: MonsterCtx): boolean
+  /** False when it should not walk in while it has attacks to choose (its `approachWeight` is skipped). */
+  walksIn?(g: Game): boolean
   /** A move may be chosen in the current state. */
   allows(g: Game, move: string): boolean
   /** After damage landed on `part`: true when it took over the reaction (e.g. a part broke). */

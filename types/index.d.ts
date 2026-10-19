@@ -3,7 +3,7 @@ export type HuntPhase = 'camp' | 'hunting' | 'retreat' | 'paused'
 
 export type HuntEvent = { at: number; text: string }
 
-export type HuntSceneId = 'S01' | 'S02' | 'S03' | 'S04'
+export type HuntSceneId = 'S01' | 'S02' | 'S03' | 'S04' | 'S05'
 export type HunterMoveId =
   | 'idle'
   | 'run'
@@ -20,7 +20,7 @@ export type HunterMoveId =
 export type MonsterMoveId = string
 
 /** Registered monster species (hooks/monsters/registry.ts). */
-export type MonsterId = 'velkhana' | 'great_jagras'
+export type MonsterId = 'velkhana' | 'great_jagras' | 'tobi_kadachi' | 'anjanath' | 'barioth' | 'nargacuga' | 'tigrex' | 'zinogre' | 'ruiner_nergigante'
 
 /** The state machine's place: at camp, travelling, fighting, or leaving a fight. */
 export type HuntMode = 'camp' | 'leaving' | 'arriving' | 'fight' | 'retreating' | 'carted' | 'slain'
@@ -66,6 +66,8 @@ export type HuntRun = {
   parts: Record<string, { durability: number; broken: boolean }>
   /** Fight tick from which each attack may be chosen again. */
   cooldowns: Record<string, number>
+  /** The species' own counters (rage, charge, spike stages, a locked landing spot); absent on older saves. */
+  meters?: Record<string, number>
 }
 
 export type HuntGame = {

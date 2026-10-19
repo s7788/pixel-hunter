@@ -1,1 +1,1 @@
-{ "name": "hunt-8bit", "version": "0.4.0", "description": "8-bit hunting companion pane that follows Claude's turns", "types": "./types/index.d.ts" }
+{ "name": "hunt-8bit", "version": "0.7.0", "description": "8-bit hunting companion pane that follows Claude's turns", "types": "./types/index.d.ts" }

@@ -9,12 +9,12 @@ import type {
   MonsterMoveId as MonsterMove,
 } from '../types'
 import type { Aabb, Placement } from './collision'
-import { contactPart, hitboxes, hurtboxes, reaches, shifted, toWorld, touchesAny } from './collision'
-import { BOXES, MOVE_BOUNDS } from './collision-data'
+import { contactPart, hitboxes, hitDefs, hurtboxes, reaches, shifted, toWorld, touchesAny } from './collision'
+import { MOVE_BOUNDS } from './collision-data'
 import type { Move } from './data'
 import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS } from './data'
 import { enabledMonsters, monsterDef, VELKHANA } from './monsters/registry'
-import type { MonsterCtx, MonsterDef, MonsterMove as MonsterMoveDef } from './monsters/types'
+import type { Fx, MonsterCtx, MonsterDef, MonsterMove as MonsterMoveDef } from './monsters/types'
 import { RANGE_BANDS } from './monsters/types'
 import type { ActionId, SceneId } from './sprites'
 import { SCENES } from './sprites'
@@ -48,8 +48,20 @@ const isDown = (g: Game): boolean => {
   return move.opening === true && move.then !== undefined
 }
 
-/** `hitShift`: local pixels the live hit box has flown (a projectile), for the debug boxes. */
-export type ActorView = { action: ActionId; frame: number; x: number; facing: 1 | -1; hitShift?: number }
+/**
+ * `hitShift`/`hitSpread`: local pixels the live hit boxes have flown (a
+ * projectile, a spread volley), for the debug boxes; `lift`: the root's height
+ * in a leap (negative = up).
+ */
+export type ActorView = {
+  action: ActionId
+  frame: number
+  x: number
+  facing: 1 | -1
+  hitShift?: number
+  hitSpread?: number[]
+  lift?: number
+}
 
 export type View = {
   scene: SceneId
@@ -62,7 +74,7 @@ export type View = {
   label: string
   monsterHpPercent: number | null
   /** Effects drawn on live hit boxes (a projectile in flight). */
-  effects: { fx: 'spit'; box: Aabb }[]
+  effects: { fx: Fx; box: Aabb }[]
   /** Debug: where recent hits met (the last MARK_TICKS ticks). */
   marks: { x: number; y: number; outcome: Outcome }[]
   /** Camp props: the fire's flicker frame, and the meat on the spit (0 raw .. 1 done; null while eaten). */
@@ -88,11 +100,6 @@ export function poseAt(move: Move, t: number): number {
 
 const loopPose = (move: Move, t: number): number => poseAt(move, t % sum(move.ticks))
 const isOver = (move: Move, t: number): boolean => t >= sum(move.ticks)
-/** First tick of the active pose, and the tick after it. */
-const activeSpan = (move: Move): [number, number] => {
-  const start = sum(move.ticks.slice(0, move.active ?? 0))
-  return [start, start + (move.ticks[move.active ?? 0] ?? 0)]
-}
 
 const SAVE_SCHEMA = 3
 const SCENE_SCALE = 3
@@ -101,7 +108,31 @@ const MARK_TICKS = 8
 const HUNTER_LOOPING = new Set<string>(['idle', 'run', 'walk'])
 const hunterPoseOf = (key: string, move: Move, t: number): number =>
   HUNTER_LOOPING.has(key) ? loopPose(move, t) : poseAt(move, t)
+/** The tick segment a monster move is in (its pose index); `frameOf` maps it to the sprite frame shown. */
 const monsterPoseOf = (move: MonsterMoveDef, t: number): number => (move.loop === true ? loopPose(move, t) : poseAt(move, t))
+const frameOf = (move: MonsterMoveDef, seg: number): number => move.frames?.[seg] ?? seg
+/** A move's active segments (a combo has several, each its own group). */
+const activesOf = (move: MonsterMoveDef): readonly number[] => move.actives ?? (move.active === undefined ? [] : [move.active])
+const spanOf = (move: Move, seg: number): [number, number] => {
+  const start = sum(move.ticks.slice(0, seg))
+  return [start, start + (move.ticks[seg] ?? 0)]
+}
+/** The active span a projectile flies from: the latest one started by tick `t` (the first before any). */
+function launchOf(move: MonsterMoveDef, t: number): [number, number] {
+  const spans = activesOf(move).map(seg => spanOf(move, seg))
+  return spans.filter(([start]) => start <= t).at(-1) ?? spans[0] ?? [0, 0]
+}
+
+/** The root's height at tick `t` of a move: linear between its lift keys, 0 outside them or without any. */
+export function liftAt(move: MonsterMoveDef, t: number): number {
+  const keys = move.lift
+  if (keys === undefined || keys.length === 0 || t <= keys[0]![0] || t >= keys[keys.length - 1]![0]) return 0
+  let i = 1
+  while (keys[i]![0] < t) i += 1
+  const [t0, y0] = keys[i - 1]!
+  const [t1, y1] = keys[i]!
+  return Math.round(y0 + ((y1 - y0) * (t - t0)) / (t1 - t0))
+}
 
 /** mulberry32 over the state's seed. */
 function rand(g: Game): number {
@@ -192,8 +223,11 @@ export function monsterHpForTarget(id: MonsterId): number {
 /** The species of a new hunt: an enabled one, from the seed (the draw leaves the seed as it is). */
 function drawMonster(g: Game): MonsterId {
   const pool = enabledMonsters()
-  const mixed = Math.imul(g.seed ^ Math.imul(g.huntNo + 1, 0x9e3779b1), 0x85ebca6b) >>> 0
-  return pool[mixed % pool.length]!
+  // murmur3's finalizer: a bare multiply leaves the low bits patterned, and with six species only three came up
+  let x = g.seed ^ Math.imul(g.huntNo + 1, 0x9e3779b1)
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b)
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35)
+  return pool[((x ^ (x >>> 16)) >>> 0) % pool.length]!
 }
 
 function startHunt(g: Game, id: MonsterId = drawMonster(g), hp: number = monsterHpForTarget(id), maxHp: number = hp): void {
@@ -246,6 +280,9 @@ function monsterDo(g: Game, move: MonsterMove): void {
   g.monster.t = 0
   g.monster.attack = startAttack(g, 'monster', monsterMove(g, move))
 }
+
+/** The hunt's species counters, created on first use (saves from before them have none). */
+const meters = (g: Game): Record<string, number> => (g.hunt!.meters ??= {})
 
 const ctxOf = (g: Game): MonsterCtx => ({ g, act: move => monsterDo(g, move), say: text => say(g, text) })
 
@@ -458,18 +495,35 @@ export function step(game: Game, working: boolean): Game {
 
 const groundOf = (g: Game): number => SCENES[g.hunt!.scene].ground * SCENE_SCALE
 const hunterAt = (g: Game): Placement => ({ x: g.hunter.x, groundY: groundOf(g), renderFlip: g.hunter.facing })
-const monsterAt = (g: Game): Placement => ({ x: g.monster.x, groundY: groundOf(g), renderFlip: 1 })
+const monsterAt = (g: Game): Placement => ({
+  x: g.monster.x,
+  groundY: groundOf(g) + liftAt(monsterMove(g, g.monster.move), g.monster.t),
+  renderFlip: 1,
+})
 const hunterPose = (g: Game): [ActionId, number] => {
   const move = hunterMove(g.hunter.move)
   return [move.action, hunterPoseOf(g.hunter.move, move, g.hunter.t)]
 }
 const monsterPose = (g: Game): [ActionId, number] => {
   const move = monsterMove(g, g.monster.move)
-  return [move.action, monsterPoseOf(move, g.monster.t)]
+  return [move.action, frameOf(move, monsterPoseOf(move, g.monster.t))]
 }
 
-/** The monster's push box now (its state may widen it). */
-const pushBox = (g: Game): readonly [number, number] => defOf(g).mechanic?.bounds?.(g) ?? defOf(g).bounds
+/** The monster faces the other way in this segment of its move (a turn-back dash). */
+const isTurned = (g: Game): boolean => {
+  const move = monsterMove(g, g.monster.move)
+  return move.turned?.includes(monsterPoseOf(move, g.monster.t)) === true
+}
+
+/** The monster's push box now (its state may widen it; turned round it mirrors). */
+const pushBox = (g: Game): readonly [number, number] => {
+  const own = defOf(g).mechanic?.bounds?.(g) ?? defOf(g).bounds
+  return isTurned(g) ? [-own[1], -own[0]] : own
+}
+
+/** Rightmost the monster's root goes: its push box stays on the screen. */
+const ARENA_RIGHT = 368
+const monsterMaxX = (g: Game): number => ARENA_RIGHT - pushBox(g)[1]
 
 /** The bodies never overlap: the hunter stays left of the monster's push box. */
 const hunterMaxX = (g: Game): number => g.monster.x + pushBox(g)[0] - MOVE_BOUNDS.hunter[1] - BODY_GAP
@@ -479,23 +533,30 @@ const monsterMinX = (g: Game): number =>
 /** Local pixels a projectile has flown forward by this tick of its move (forward = the art's facing). */
 function flight(g: Game, move: MonsterMoveDef, t: number): number {
   if (move.travel === undefined) return 0
-  return defOf(g).assetFacing * move.travel * Math.max(0, t - activeSpan(move)[0])
+  return defOf(g).assetFacing * move.travel * Math.max(0, t - launchOf(move, t)[0])
+}
+
+/** Pixels each box of a spread volley has drifted down by this tick (none without a spread). */
+function drift(move: MonsterMoveDef, t: number): number[] | undefined {
+  if (move.spread === undefined) return undefined
+  const since = Math.max(0, t - launchOf(move, t)[0])
+  return move.spread.map(v => v * since)
 }
 
 /** The monster's live hit boxes this tick (a projectile where it has flown to). */
 function monsterHits(g: Game): Aabb[] {
   const move = monsterMove(g, g.monster.move)
   const [action, pose] = monsterPose(g)
-  return hitboxes(action, pose, monsterAt(g), flight(g, move, g.monster.t))
+  return hitboxes(action, pose, monsterAt(g), flight(g, move, g.monster.t), drift(move, g.monster.t))
 }
 
 /** Everywhere this monster attack could land from where it stands: lunge and flight included. */
 function monsterReach(g: Game, key: MonsterMove): Aabb[] {
   const move = monsterMove(g, key)
-  const [start, end] = activeSpan(move)
+  const [start, end] = launchOf(move, 0)
   const forward = (move.advance ?? 0) + (move.travel ?? 0) * Math.max(0, end - start - 1)
   const along = defOf(g).assetFacing * forward
-  return (BOXES[move.action].hit?.boxes ?? []).flatMap(b => {
+  return hitDefs(move.action).flatMap(h => h.boxes).flatMap(b => {
     const [x0, y0, x1, y1] = shifted(b, along)
     return [toWorld(forward === 0 ? b : [Math.min(b[0], x0), y0, Math.max(b[2], x1), y1], monsterAt(g))]
   })
@@ -624,15 +685,35 @@ function fight(g: Game): void {
   const m = g.monster
   hunt.fightTicks += 1
   hunt.stateT += 1
+  // a combo's next active segment is a new group: it may land once more
+  const before = monsterMove(g, m.move)
+  if (before.actives !== undefined && m.t > 0) {
+    const at = monsterPoseOf(before, m.t)
+    if (at !== monsterPoseOf(before, m.t - 1) && at !== before.actives[0] && before.actives.includes(at)) {
+      m.attack = startAttack(g, 'monster', before)
+    }
+  }
   if (settle(g)) return
+  def.mechanic?.tick?.(ctxOf(g))
 
   // monster: finish moves, lunge, walk in, then decide
   const mNow = monsterMove(g, m.move)
   const idle = idleKey(g)
   const walk = walkKey(g)
-  if (mNow.advance !== undefined && monsterPoseOf(mNow, m.t) === mNow.active) {
-    const [start, end] = activeSpan(mNow)
-    m.x = Math.max(monsterMinX(g), m.x + (def.assetFacing * mNow.advance) / Math.max(1, end - start))
+  // a dive locks its landing spot once: the nearest legal spot to the hunter, within its reach
+  if (mNow.seek !== undefined && m.t === mNow.seek) {
+    meters(g).seekX = Math.round(Math.max(monsterMinX(g), m.x + def.assetFacing * (mNow.advance ?? 0)))
+  }
+  const seg = monsterPoseOf(mNow, m.t)
+  if (mNow.advance !== undefined && activesOf(mNow).includes(seg)) {
+    const [start, end] = spanOf(mNow, seg)
+    if (mNow.seek !== undefined) {
+      const to = meters(g).seekX ?? m.x
+      m.x = Math.max(monsterMinX(g), m.x + (to - m.x) / Math.max(1, end - m.t))
+    } else {
+      const stride = ((isTurned(g) ? -1 : 1) * def.assetFacing * mNow.advance) / Math.max(1, end - start)
+      m.x = stride < 0 ? Math.max(monsterMinX(g), m.x + stride) : Math.min(monsterMaxX(g), m.x + stride)
+    }
   }
   if (m.move !== idle && m.move !== walk && isOver(mNow, m.t)) {
     if (mNow.then !== undefined) monsterDo(g, mNow.then)
@@ -695,9 +776,15 @@ function hunterReaches(g: Game, move: HunterMove): boolean {
   return reaches(hunterMove(move).action, { ...hunterAt(g), renderFlip: 1 }, mAction, mPose, monsterAt(g))
 }
 
+/** The monster is open to the strongest swing: a reaction, or the tail end of a move (`openFrom`). */
+function isOpening(g: Game): boolean {
+  const move = monsterMove(g, g.monster.move)
+  return move.opening === true || (move.openFrom !== undefined && g.monster.t >= move.openFrom)
+}
+
 function hunterDecide(g: Game): void {
   const h = g.hunter
-  const opening = monsterMove(g, g.monster.move).opening === true
+  const opening = isOpening(g)
   let choice: HunterMove | 'wait'
   if (opening) choice = can(g, 'trueCharge') ? 'trueCharge' : can(g, 'charge') ? 'charge' : can(g, 'tackle') ? 'tackle' : 'wait'
   else {
@@ -785,10 +872,11 @@ function monsterDecide(g: Game): void {
     if (!isAllowed(g, key)) continue
     const move = monsterMove(g, key)
     const fits = move.range !== undefined ? inRange(g, move.range) : touchesAny(monsterReach(g, key), hAction, hPose, hunterAt(g))
-    if (fits) options.push([key, move.weight ?? 1])
+    if (fits && (move.hazard !== true || hazardFits(g, key))) options.push([key, move.weight ?? 1])
   }
   const walk = walkKey(g)
-  if (options.length > 0 && def.approachWeight !== undefined && m.x > monsterMinX(g)) options.push([walk, def.approachWeight])
+  const walksIn = def.mechanic?.walksIn?.(g) !== false
+  if (options.length > 0 && def.approachWeight !== undefined && walksIn && m.x > monsterMinX(g)) options.push([walk, def.approachWeight])
   if (options.length === 0) {
     if (m.x > monsterMinX(g)) monsterDo(g, walk)
     else m.wait = between(g, def.idleTicks)
@@ -802,13 +890,21 @@ function monsterDecide(g: Game): void {
   if (move.label !== undefined) say(g, move.label)
 }
 
+/** A ground hazard is placed only where all of it is on the arena (spec 3.4). */
+function hazardFits(g: Game, key: MonsterMove): boolean {
+  return monsterReach(g, key).every(b => b.minX >= HUNTER.minX && b.maxX <= ARENA_RIGHT)
+}
+
 /** Ticks until the monster's attack can first touch, while it can still touch; null when no threat. */
 function threat(g: Game): number | null {
   const m = g.monster
   const move = monsterMove(g, m.move)
   if (m.attack === null || move.active === undefined || m.attack.contacts.some(c => c.target === 'hunter')) return null
-  const [start, end] = activeSpan(move)
-  if (m.t >= end) return null
+  const next = activesOf(move)
+    .map(seg => spanOf(move, seg))
+    .find(([, end]) => m.t < end)
+  if (next === undefined) return null
+  const [start] = next
   const [hAction, hPose] = hunterPose(g)
   return touchesAny(monsterReach(g, m.move), hAction, hPose, hunterAt(g)) ? Math.max(0, start - m.t) : null
 }
@@ -862,6 +958,20 @@ const actorView = (move: Move, frame: number, a: { x: number }, facing: 1 | -1):
   facing,
 })
 
+/** Effects on the live hit boxes, and a dive's landing mark from the lock until it lands. */
+function effectsOf(g: Game, move: MonsterMoveDef): View['effects'] {
+  const out: View['effects'] = move.fx === undefined ? [] : monsterHits(g).map(box => ({ fx: move.fx!, box }))
+  const to = g.hunt?.meters?.seekX
+  if (move.seek !== undefined && to !== undefined && g.monster.t >= move.seek && g.monster.t < launchOf(move, 0)[1]) {
+    const at = { x: to, groundY: groundOf(g), renderFlip: 1 as const }
+    const land = hitDefs(move.action).flatMap(h => h.boxes.map(b => toWorld(b, at)))
+    const minX = Math.min(...land.map(b => b.minX))
+    const maxX = Math.max(...land.map(b => b.maxX))
+    out.push({ fx: 'mark', box: { minX, maxX, minY: groundOf(g) - 3, maxY: groundOf(g) } })
+  }
+  return out
+}
+
 export function viewOf(g: Game): View {
   const inCamp = g.mode === 'camp' || g.mode === 'leaving'
   const h = g.hunter
@@ -874,13 +984,18 @@ export function viewOf(g: Game): View {
     monster:
       mMove === undefined
         ? null
-        : { ...actorView(mMove, monsterPoseOf(mMove, g.monster.t), g.monster, 1), hitShift: flight(g, mMove, g.monster.t) },
+        : {
+            ...actorView(mMove, frameOf(mMove, monsterPoseOf(mMove, g.monster.t)), g.monster, 1),
+            hitShift: flight(g, mMove, g.monster.t),
+            ...(mMove.spread === undefined ? {} : { hitSpread: drift(mMove, g.monster.t)! }),
+            ...(mMove.lift === undefined ? {} : { lift: liftAt(mMove, g.monster.t) }),
+          },
     monsterInfo: def === undefined || inCamp ? null : { name: def.name, species: def.species, status: def.mechanic?.status(g) ?? null },
     hp: h.hp,
     stamina: h.stamina,
     label: g.labelT < LABEL_TICKS ? g.label : '',
     monsterHpPercent: g.hunt === null ? null : Math.round((100 * g.hunt.monsterHp) / g.hunt.monsterHpMax),
-    effects: mMove?.fx === undefined || g.mode !== 'fight' ? [] : monsterHits(g).map(box => ({ fx: mMove.fx!, box })),
+    effects: mMove === undefined || g.mode !== 'fight' ? [] : effectsOf(g, mMove),
     marks: inCamp
       ? []
       : g.hits.flatMap(hit =>

@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { HUNTER, TICK_MS } from './data'
 import type { Game } from './engine'
 import { beginTurn, debugHunt, endTurn, migrate, monsterHpForTarget, newGame, restore, step, viewOf } from './engine'
-import { GREAT_JAGRAS } from './monsters/registry'
+import { GREAT_JAGRAS, MONSTERS } from './monsters/registry'
 import { huntSvg } from './svg'
 
 const run = (g: Game, ticks: number, working = true): Game => {
@@ -183,15 +183,15 @@ test('G09: a schema-2 save is Velkhana, HP and the fight under way kept', () => 
   expect(JSON.stringify([a.hunter, a.monster, a.seed, a.hits, a.hunt!.monsterHp])).toBe(JSON.stringify([b.hunter, b.monster, b.seed, b.hits, b.hunt!.monsterHp]))
 })
 
-test('new hunts draw an enabled species from the seed; a hunt never changes species', () => {
+test('new hunts draw an enabled species from the seed; a hunt never changes species', { timeoutMs: 120000 }, () => {
   const drawn = new Set<string>()
-  for (let seed = 1; seed <= 30; seed += 1) {
+  for (let seed = 1; seed <= 80; seed += 1) {
     const g = beginTurn(newGame(seed))
     drawn.add(g.hunt!.monsterId)
-    expect(g.hunt!.scene).toBe(g.hunt!.monsterId === 'great_jagras' ? 'S01' : g.hunt!.scene)
+    expect(MONSTERS[g.hunt!.monsterId]!.scenes as readonly string[]).toContain(g.hunt!.scene)
     expect(run(g, 200).hunt!.monsterId).toBe(g.hunt!.monsterId)
   }
-  expect([...drawn].sort()).toEqual(['great_jagras', 'velkhana'])
+  expect([...drawn].sort()).toEqual(['anjanath', 'barioth', 'great_jagras', 'nargacuga', 'ruiner_nergigante', 'tigrex', 'tobi_kadachi', 'velkhana', 'zinogre'])
 })
 
 test('a saved hunt whose species is not registered waits at camp, kept as it was', () => {

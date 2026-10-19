@@ -184,7 +184,7 @@ const rect = (b: Aabb, cls: string): string =>
 function boxes(a: ActorView, ground: number, assetFacing: 1 | -1): string {
   const at: Placement = { x: a.x, groundY: ground, renderFlip: a.facing }
   let out = hurtboxes(a.action, a.frame, at).map(p => rect(p.box, 'bh')).join('')
-  const live = hitboxes(a.action, a.frame, at, a.hitShift ?? 0)
+  const live = hitboxes(a.action, a.frame, at, a.hitShift ?? 0, a.hitSpread)
   out += (live.length > 0 ? live.map(b => rect(b, 'bx')) : attackReach(a.action, at).map(b => rect(b, 'bw'))).join('')
   // the way the actor really faces: the hunter is drawn facing right, the monster left
   const dir = assetFacing * a.facing
@@ -208,7 +208,57 @@ function spit(b: Aabb): string {
   )
 }
 
-const effects = (list: View['effects']): string => list.map(e => (e.fx === 'spit' ? spit(e.box) : '')).join('')
+/** One piece of a fire breath on its live hit box: red rim, orange body, yellow core; clipped at the screen's left edge. */
+function flame(b: Aabb): string {
+  const x = Math.max(0, b.minX)
+  const w = b.maxX - x
+  const h = b.maxY - b.minY
+  if (w <= 0) return ''
+  const y = b.minY
+  const q = Math.max(2, Math.round(h / 4))
+  return (
+    `<rect x="${x}" y="${y + q}" width="${w}" height="${h - 2 * q}" fill="#c8361a"/>` +
+    `<rect x="${x + 2}" y="${y}" width="${Math.max(0, w - 4)}" height="${h}" fill="#e8582a" fill-opacity=".85"/>` +
+    `<rect x="${x + 2}" y="${y + q}" width="${Math.max(0, w - 4)}" height="${h - 2 * q}" fill="#ff8a1f"/>` +
+    `<rect x="${x + 4}" y="${y + q + 2}" width="${Math.max(0, w - 8)}" height="${Math.max(0, h - 2 * q - 4)}" fill="#ffd21f"/>`
+  )
+}
+
+/** An ice whirlwind standing on its live hit box: stacked bands, wider at the top, pale core. */
+function tornado(b: Aabb): string {
+  const w = b.maxX - b.minX
+  const h = b.maxY - b.minY
+  const cx = (b.minX + b.maxX) / 2
+  let out = ''
+  const bands = 8
+  for (let i = 0; i < bands; i += 1) {
+    const bw = Math.max(6, Math.round((w * (4 + i)) / (bands + 3)))
+    const y = b.maxY - ((i + 1) * h) / bands
+    const shift = i % 2 === 0 ? -2 : 2
+    out += `<rect x="${cx - bw / 2 + shift}" y="${y}" width="${bw}" height="${h / bands - 1}" fill="${i % 2 === 0 ? '#9fd4ff' : '#e8f6ff'}" fill-opacity=".8"/>`
+  }
+  return out + `<rect x="${cx - 2}" y="${b.minY + 4}" width="4" height="${h - 8}" fill="#ffffff" fill-opacity=".7"/>`
+}
+
+/** A thrown spike on its live hit box: a dark-edged silver shard pointing the way it flies (left). */
+function spikeFx(b: Aabb): string {
+  const cy = (b.minY + b.maxY) / 2
+  return (
+    `<rect x="${b.minX}" y="${cy - 1}" width="${b.maxX - b.minX + 6}" height="3" fill="#3a3f4a"/>` +
+    `<rect x="${b.minX + 1}" y="${cy}" width="${b.maxX - b.minX + 4}" height="1" fill="#e6ecf4"/>`
+  )
+}
+
+/** A dive's locked landing spot: a dashed red line on the ground. */
+function mark(b: Aabb): string {
+  let out = ''
+  for (let x = Math.max(0, b.minX); x < b.maxX; x += 8) out += `<rect x="${x}" y="${b.minY}" width="5" height="2" fill="#ff4030"/>`
+  return out
+}
+
+const EFFECTS: Record<View['effects'][number]['fx'], (b: Aabb) => string> = { spit, flame, tornado, spikes: spikeFx, mark }
+
+const effects = (list: View['effects']): string => list.map(e => EFFECTS[e.fx](e.box)).join('')
 
 /** Debug: a white cross where a hit met (grey when rolled through). */
 const marks = (list: View['marks']): string =>
@@ -242,10 +292,10 @@ export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: b
   const ground = SCENES[view.scene].ground * SCENE_SCALE
   let actors =
     (view.camp === null ? '' : campProps(view.camp)) +
-    (view.monster === null ? '' : actor(view.monster, ground)) +
+    (view.monster === null ? '' : actor(view.monster, ground + (view.monster.lift ?? 0))) +
     actor(view.hunter, ground) +
     effects(view.effects)
-  if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground, -1)) + boxes(view.hunter, ground, 1) + marks(view.marks)
+  if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground + (view.monster.lift ?? 0), -1)) + boxes(view.hunter, ground, 1) + marks(view.marks)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +
     `<style>${CSS}</style><g fill="none" stroke-width="1">${scene(view.scene)}${actors}</g>` +

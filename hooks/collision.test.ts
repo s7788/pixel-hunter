@@ -15,7 +15,7 @@ test('every action has valid boxes for each of its poses', () => {
     const data = BOXES[id]
     expect(data).toBeDefined()
     expect(data.hurt.length === 1 || data.hurt.length === sprite.frames.length).toBe(true)
-    const all = [...data.hurt.flatMap(set => Object.values(set)), ...(data.hit?.boxes ?? [])]
+    const all = [...data.hurt.flatMap(set => Object.values(set)), ...[data.hit, ...(data.more ?? [])].flatMap(h => h?.boxes ?? [])]
     for (const [x0, y0, x1, y1] of all) {
       expect([x0, y0, x1, y1].every(Number.isFinite)).toBe(true)
       expect(x1 > x0 && y1 > y0).toBe(true)
@@ -26,7 +26,23 @@ test('every action has valid boxes for each of its poses', () => {
 
 test('the hit pose of each attack is the active pose in data.ts', () => {
   const moves: Move[] = [...Object.values(HUNTER.moves), ...Object.values(MONSTERS).flatMap(def => Object.values(def!.moves))]
-  for (const move of moves) expect(BOXES[move.action].hit?.pose).toBe(move.active)
+  for (const move of moves) {
+    const combo = move as Move & { frames?: readonly number[]; actives?: readonly number[] }
+    const hitPoses = [BOXES[move.action].hit, ...(BOXES[move.action].more ?? [])].flatMap(h => (h === undefined ? [] : [h.pose]))
+    if (combo.frames === undefined && combo.actives === undefined) {
+      // a plain move: its one active pose is the action's hit pose; non-attacks of an attack action show none of it
+      if (move.active !== undefined) expect(BOXES[move.action].hit?.pose).toBe(move.active)
+      else expect(hitPoses.every(p => p >= move.ticks.length || move.ticks[p] === 0)).toBe(true)
+    } else {
+      // a combo: every active segment shows an attack pose, and no other segment does
+      const actives = combo.actives ?? [move.active!]
+      move.ticks.forEach((span, seg) => {
+        if (span === 0) return
+        const frame = combo.frames?.[seg] ?? seg
+        expect(hitPoses.includes(frame)).toBe(actives.includes(seg))
+      })
+    }
+  }
 })
 
 test('edges and corners touching count as contact; a 1px gap does not', () => {
