@@ -71,7 +71,7 @@ export type HuntRun = {
 }
 
 export type HuntGame = {
-  /** 3 since the monster registry; older saves are migrated (Velkhana, HP kept). */
+  /** 4 since the per-species tally; older saves are migrated (Velkhana, HP kept). */
   saveSchemaVersion: number
   /** Simulation ticks (125 ms each); moves only when the game steps, never while paused. */
   simTick: number
@@ -98,6 +98,8 @@ export type HuntGame = {
   label: string
   labelT: number
   slain: number
+  /** Kills per species; always sums to `slain` (saves before schema 4 count every kill as Velkhana's). */
+  slainBy: Partial<Record<MonsterId, number>>
   carts: number
   /** How the last hunt ended when both fell on the same tick. */
   lastOutcome: 'mutual_ko' | null
@@ -118,6 +120,8 @@ declare module 'claude-code' {
       debugOpen: boolean
       /** Draw the collision boxes over the scene (debug). */
       boxesOpen: boolean
+      /** The terminal draws the scene as cells (true) or as an Image (false). */
+      terminalCells: boolean
     }
   }
 }

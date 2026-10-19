@@ -141,7 +141,7 @@ test('C27/C28: an old save migrates to camp, HP kept, nothing under way', () => 
   const old = JSON.parse(JSON.stringify(g)) as Record<string, unknown>
   for (const key of ['saveSchemaVersion', 'simTick', 'nextAttackSerial', 'lastOutcome', 'hits']) delete old[key]
   const back = migrate(old as unknown as Game)
-  expect(back.saveSchemaVersion).toBe(3)
+  expect(back.saveSchemaVersion).toBe(4)
   expect(back.hunt?.monsterId).toBe('velkhana')
   expect(back.mode).toBe('camp')
   expect(back.hunt?.monsterHp).toBe(g.hunt?.monsterHp)

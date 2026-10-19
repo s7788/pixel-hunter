@@ -1,10 +1,14 @@
-import type { HuntPhase } from '../types'
-import { CAMP, HUNTER } from './data'
+import type { HuntGame, HuntPhase, MonsterId } from '../types'
+import { HUNTER } from './data'
 import { attackReach, hitboxes, hurtboxes } from './collision'
 import type { Aabb, Placement } from './collision'
 import type { ActorView, View } from './engine'
 import type { RleRow, SceneId } from './sprites'
 import { ACTIONS, SCENES } from './sprites'
+import { HEADS } from './gen/heads'
+import type { Rect } from './shapes'
+import { barRects, campRects, effectRects, placeActor } from './shapes'
+import { MONSTERS } from './monsters/registry'
 
 type Palette = Readonly<Record<string, string>>
 
@@ -76,104 +80,37 @@ function actor(a: ActorView, ground: number): string {
     paths = gridToPaths(rows, sprite.palette)
     frameCache.set(key, paths)
   }
-  const top = ground - rows.length
-  const place =
-    a.facing === 1 ? `translate(${a.x - sprite.anchorX} ${top})` : `translate(${a.x + sprite.anchorX} ${top}) scale(-1 1)`
-  return `<g transform="${place}">${paths}</g>`
+  const at = placeActor(a, ground)
+  return `<g transform="translate(${at.tx} ${at.top})${at.flip ? ' scale(-1 1)' : ''}">${paths}</g>`
 }
 
-/**
- * Campfire flames, one shape per flicker frame: rows from the top, each a run
- * start (from the fire's centre) and a colour letter per pixel.
- */
-const FLAME_COLORS: Record<string, string> = { r: '#e8402a', o: '#ff8a1f', y: '#ffd21f', w: '#fff4c2' }
-const FLAMES: readonly (readonly [number, string][])[] = [
-  [[0, 'o'], [-1, 'ooo'], [-2, 'oyyo'], [-3, 'royyor'], [-3, 'rowyor'], [-4, 'roywyoor'], [-4, 'rroyyorr']],
-  [[1, 'o'], [-1, 'oyo'], [-2, 'royo'], [-3, 'royyor'], [-3, 'oywwyo'], [-4, 'royywyor'], [-4, 'rroyyorr']],
-  [[-1, 'o'], [-1, 'oo'], [-2, 'oyyo'], [-2, 'oywyo'], [-3, 'royyyor'], [-4, 'roywwyor'], [-4, 'rroyyorr']],
-  [[0, 'r'], [0, 'oo'], [-2, 'oyo'], [-3, 'royyor'], [-3, 'oywyyo'], [-4, 'royywyor'], [-4, 'rroyyorr']],
-]
-
-function rowsToRects(rows: readonly (readonly [number, string])[], x: number, y: number, size: number, colors: Record<string, string>): string {
-  let out = ''
-  rows.forEach(([start, run], r) => {
-    for (let i = 0; i < run.length; i += 1) {
-      const c = colors[run.charAt(i)]
-      if (c !== undefined) out += `<rect x="${x + (start + i) * size}" y="${y + r * size}" width="${size}" height="${size}" fill="${c}"/>`
-    }
-  })
-  return out
-}
-
-const mix = (a: number, b: number, k: number): number => Math.round(a + (b - a) * k)
-const meatColor = (cook: number): string => {
-  const raw = [0xd8, 0x4a, 0x5a]
-  const done = [0x8a, 0x48, 0x22]
-  return '#' + raw.map((v, i) => mix(v, done[i]!, cook).toString(16).padStart(2, '0')).join('')
-}
-
-/** The camp's fire (flickering), its logs, and the meat on a spit over it. */
-function campProps(camp: NonNullable<View['camp']>): string {
-  const x = CAMP.fireX
-  const base = CAMP.fireY
-  const flame = FLAMES[camp.flicker % FLAMES.length]!
-  let out =
-    `<rect x="${x - 12}" y="${base - 2}" width="24" height="4" fill="#5a3418"/>` +
-    `<rect x="${x - 9}" y="${base - 4}" width="18" height="3" fill="#7a4a24"/>` +
-    rowsToRects(flame, x - 1, base - 4 - flame.length * 2, 2, FLAME_COLORS) +
-    `<rect x="${x - 15}" y="${base - 24}" width="2" height="24" fill="#4a2c14"/>` +
-    `<rect x="${x + 13}" y="${base - 24}" width="2" height="24" fill="#4a2c14"/>` +
-    `<rect x="${x - 17}" y="${base - 25}" width="34" height="2" fill="#6b4020"/>`
-  if (camp.cook !== null) {
-    out +=
-      `<rect x="${x - 6}" y="${base - 29}" width="12" height="8" fill="${meatColor(camp.cook)}"/>` +
-      `<rect x="${x - 8}" y="${base - 27}" width="16" height="4" fill="${meatColor(camp.cook)}"/>` +
-      `<rect x="${x - 10}" y="${base - 26}" width="2" height="2" fill="#f4f0e0"/>` +
-      `<rect x="${x + 8}" y="${base - 26}" width="2" height="2" fill="#f4f0e0"/>`
-  }
-  return out
-}
-
-function bar(x: number, y: number, segs: number, filled: number, on: string, off: string): string {
-  let out = `<rect x="${x - 2}" y="${y - 2}" width="${segs * 8 + 2}" height="10" fill="#10183a"/>`
-  for (let i = 0; i < segs; i += 1) {
-    out += `<rect x="${x + i * 8}" y="${y}" width="6" height="6" fill="${i < filled ? on : off}"/>`
-  }
-  return out
-}
-
-/** HUD_GUIDE's bottom row: one selected weapon; switching is closed during a hunt. */
-function weapons(isLocked: boolean): string {
-  const slots = [
-    { label: '大劍', isOn: true, isV2: false },
-    { label: '太刀', isOn: false, isV2: true },
-    { label: '弓', isOn: false, isV2: true },
-  ]
-  return slots
-    .map((s, i) => {
-      const x = 102 + i * 62
-      const edge = s.isOn ? '#ffc23a' : '#3a4f8a'
-      const text = s.isV2 || (isLocked && !s.isOn) ? '#6f7fa8' : '#f4f8ff'
-      return (
-        `<rect x="${x}" y="${H - 24}" width="56" height="18" fill="#10183a" stroke="${edge}" stroke-width="2"/>` +
-        `<text x="${x + 28}" y="${H - 11}" class="w" fill="${text}">${s.label}${s.isV2 ? ' v2' : ''}</text>`
-      )
-    })
+/** Flat rectangles as Svg. */
+const rects = (list: readonly Rect[]): string =>
+  list
+    .map(q => `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.h}" fill="${q.fill}"${q.alpha === undefined ? '' : ` fill-opacity="${q.alpha}"`}/>`)
     .join('')
+
+/** The bottom row: the greatsword, the only weapon in this version, centred (the longsword and bow are not scheduled). */
+function weapons(): string {
+  const x = (W - 56) / 2
+  return (
+    `<rect x="${x}" y="${H - 24}" width="56" height="18" fill="#10183a" stroke="#ffc23a" stroke-width="2"/>` +
+    `<text x="${x + 28}" y="${H - 11}" class="w" fill="#f4f8ff">大劍</text>`
+  )
 }
 
 function hud(phase: HuntPhase, view: View, clock: string): string {
   const low = view.hp <= HUNTER.hpMax / 4
   return (
-    `<text x="8" y="17" class="t">HP</text>${bar(34, 9, HUNTER.hpMax, view.hp, low ? '#e8402a' : '#2ee05a', '#2a3550')}` +
-    `<text x="8" y="33" class="t">ST</text>${bar(34, 25, HUNTER.staminaMax, view.stamina, '#ffd21f', '#2a3550')}` +
+    `<text x="8" y="17" class="t">HP</text>${rects(barRects(34, 9, HUNTER.hpMax, view.hp, low ? '#e8402a' : '#2ee05a', '#2a3550'))}` +
+    `<text x="8" y="33" class="t">ST</text>${rects(barRects(34, 25, HUNTER.staminaMax, view.stamina, '#ffd21f', '#2a3550'))}` +
     `<rect x="284" y="6" width="94" height="58" fill="#10183a" stroke="#f0a020" stroke-width="2"/>` +
     `<text x="331" y="21" class="n">${view.monsterInfo?.name ?? '—'}</text>` +
     `<text x="331" y="31" class="p">${view.monsterInfo?.status ?? view.monsterInfo?.species ?? ''}</text>` +
     `<text x="331" y="45" class="c">${clock}</text>` +
     `<text x="331" y="59" class="s">${PHASE_LABEL[phase]}</text>` +
     (view.label === '' ? '' : `<text x="192" y="${H - 34}" class="a">${view.label}</text>`) +
-    weapons(phase === 'hunting')
+    weapons()
   )
 }
 
@@ -193,72 +130,7 @@ function boxes(a: ActorView, ground: number, assetFacing: 1 | -1): string {
   return out + `<path class="ba" d="M${a.x - 3} ${ground}h6M${a.x} ${ground - 3}v6"/>`
 }
 
-/** A ball of stomach fluid on its live hit box: a dark rim, green body, a light glint. */
-function spit(b: Aabb): string {
-  const x = b.minX
-  const y = b.minY
-  const w = b.maxX - b.minX
-  const h = b.maxY - b.minY
-  return (
-    `<rect x="${x + 2}" y="${y}" width="${w - 4}" height="${h}" fill="#4a5a12"/>` +
-    `<rect x="${x}" y="${y + 2}" width="${w}" height="${h - 4}" fill="#4a5a12"/>` +
-    `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" fill="#a8c42a"/>` +
-    `<rect x="${x + 4}" y="${y + 4}" width="4" height="3" fill="#e8f27a"/>` +
-    `<rect x="${x + w}" y="${y + h / 2 - 1}" width="6" height="2" fill="#a8c42a" fill-opacity=".6"/>`
-  )
-}
-
-/** One piece of a fire breath on its live hit box: red rim, orange body, yellow core; clipped at the screen's left edge. */
-function flame(b: Aabb): string {
-  const x = Math.max(0, b.minX)
-  const w = b.maxX - x
-  const h = b.maxY - b.minY
-  if (w <= 0) return ''
-  const y = b.minY
-  const q = Math.max(2, Math.round(h / 4))
-  return (
-    `<rect x="${x}" y="${y + q}" width="${w}" height="${h - 2 * q}" fill="#c8361a"/>` +
-    `<rect x="${x + 2}" y="${y}" width="${Math.max(0, w - 4)}" height="${h}" fill="#e8582a" fill-opacity=".85"/>` +
-    `<rect x="${x + 2}" y="${y + q}" width="${Math.max(0, w - 4)}" height="${h - 2 * q}" fill="#ff8a1f"/>` +
-    `<rect x="${x + 4}" y="${y + q + 2}" width="${Math.max(0, w - 8)}" height="${Math.max(0, h - 2 * q - 4)}" fill="#ffd21f"/>`
-  )
-}
-
-/** An ice whirlwind standing on its live hit box: stacked bands, wider at the top, pale core. */
-function tornado(b: Aabb): string {
-  const w = b.maxX - b.minX
-  const h = b.maxY - b.minY
-  const cx = (b.minX + b.maxX) / 2
-  let out = ''
-  const bands = 8
-  for (let i = 0; i < bands; i += 1) {
-    const bw = Math.max(6, Math.round((w * (4 + i)) / (bands + 3)))
-    const y = b.maxY - ((i + 1) * h) / bands
-    const shift = i % 2 === 0 ? -2 : 2
-    out += `<rect x="${cx - bw / 2 + shift}" y="${y}" width="${bw}" height="${h / bands - 1}" fill="${i % 2 === 0 ? '#9fd4ff' : '#e8f6ff'}" fill-opacity=".8"/>`
-  }
-  return out + `<rect x="${cx - 2}" y="${b.minY + 4}" width="4" height="${h - 8}" fill="#ffffff" fill-opacity=".7"/>`
-}
-
-/** A thrown spike on its live hit box: a dark-edged silver shard pointing the way it flies (left). */
-function spikeFx(b: Aabb): string {
-  const cy = (b.minY + b.maxY) / 2
-  return (
-    `<rect x="${b.minX}" y="${cy - 1}" width="${b.maxX - b.minX + 6}" height="3" fill="#3a3f4a"/>` +
-    `<rect x="${b.minX + 1}" y="${cy}" width="${b.maxX - b.minX + 4}" height="1" fill="#e6ecf4"/>`
-  )
-}
-
-/** A dive's locked landing spot: a dashed red line on the ground. */
-function mark(b: Aabb): string {
-  let out = ''
-  for (let x = Math.max(0, b.minX); x < b.maxX; x += 8) out += `<rect x="${x}" y="${b.minY}" width="5" height="2" fill="#ff4030"/>`
-  return out
-}
-
-const EFFECTS: Record<View['effects'][number]['fx'], (b: Aabb) => string> = { spit, flame, tornado, spikes: spikeFx, mark }
-
-const effects = (list: View['effects']): string => list.map(e => EFFECTS[e.fx](e.box)).join('')
+const effects = (list: View['effects']): string => rects(effectRects(list))
 
 /** Debug: a white cross where a hit met (grey when rolled through). */
 const marks = (list: View['marks']): string =>
@@ -291,7 +163,7 @@ const CSS =
 export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: boolean, showBoxes = false): string {
   const ground = SCENES[view.scene].ground * SCENE_SCALE
   let actors =
-    (view.camp === null ? '' : campProps(view.camp)) +
+    (view.camp === null ? '' : rects(campRects(view.camp))) +
     (view.monster === null ? '' : actor(view.monster, ground + (view.monster.lift ?? 0))) +
     actor(view.hunter, ground) +
     effects(view.effects)
@@ -304,3 +176,59 @@ export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: b
 }
 
 export const HUNT_SIZE = { width: W, height: H }
+
+/**
+ * The words the terminal shows under the picture, where the Svg's HUD draws
+ * them: phase, the species (and its state, or its kind), the clock.
+ */
+export function hudText(phase: HuntPhase, view: View, clock: string): string {
+  const info = view.monsterInfo
+  const who = info === null ? '' : `・${info.name}（${info.status ?? info.species}）`
+  return `${PHASE_LABEL[phase]}${who}・${clock}`
+}
+
+/** The monsters in the order the tally lists them (the registry's). */
+const roster = (): MonsterId[] => Object.keys(MONSTERS) as MonsterId[]
+
+/** One line of text for a surface without Svg: 討伐 7：冰呪龍×3 大凶豺龍×4 (only species slain). */
+export function statsText(g: HuntGame): string {
+  const parts = roster()
+    .filter(id => (g.slainBy[id] ?? 0) > 0)
+    .map(id => `${MONSTERS[id]!.name}×${g.slainBy[id]}`)
+  return `討伐 ${g.slain}${parts.length > 0 ? '：' + parts.join(' ') : ''}`
+}
+
+const STATS_H = 24
+const STATS_CELL = 36
+const headCache = new Map<string, string>()
+function head(id: MonsterId): string {
+  let paths = headCache.get(id)
+  if (paths === undefined) {
+    const h = HEADS[id as keyof typeof HEADS]
+    paths = gridToPaths(h.rows, h.palette)
+    headCache.set(id, paths)
+  }
+  return paths
+}
+
+/**
+ * The tally strip under the scene: 討伐 N, then each species' 16x16 head and
+ * ×count in registry order, a species not yet slain dimmed. Its own small Svg,
+ * so the scene's source limit is untouched.
+ */
+export function statsSvg(g: HuntGame): string {
+  let cells = ''
+  roster().forEach((id, i) => {
+    const n = g.slainBy[id] ?? 0
+    const x = 54 + i * STATS_CELL
+    cells +=
+      `<g transform="translate(${x} 4)"${n === 0 ? ' opacity=".3"' : ''}><g fill="none" stroke-width="1">${head(id)}</g></g>` +
+      `<text x="${x + 17}" y="16" class="k${n === 0 ? ' d' : ''}">×${n}</text>`
+  })
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${STATS_H}" width="${W}" height="${STATS_H}" shape-rendering="crispEdges">` +
+    `<style>.k{font:bold 11px monospace;fill:#f4f8ff}.d{fill:#6f7c99}.t{font:bold 12px sans-serif;fill:#ffc23a}</style>` +
+    `<rect width="${W}" height="${STATS_H}" fill="#10183a"/>` +
+    `<text x="4" y="16" class="t">討伐 ${g.slain}</text>${cells}</svg>`
+  )
+}

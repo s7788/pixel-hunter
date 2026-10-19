@@ -101,7 +101,7 @@ export function poseAt(move: Move, t: number): number {
 const loopPose = (move: Move, t: number): number => poseAt(move, t % sum(move.ticks))
 const isOver = (move: Move, t: number): boolean => t >= sum(move.ticks)
 
-const SAVE_SCHEMA = 3
+const SAVE_SCHEMA = 4
 const SCENE_SCALE = 3
 const HITS_KEPT = 30
 const MARK_TICKS = 8
@@ -186,6 +186,7 @@ export function newGame(seed: number): Game {
     label: '',
     labelT: LABEL_TICKS,
     slain: 0,
+    slainBy: {},
     carts: 0,
     lastOutcome: null,
     hits: [],
@@ -352,12 +353,22 @@ function upgradeHunt(hunt: HuntRun): HuntRun {
  * An older save. Before collision (no schema 2) attacks under way had no
  * contact record, so they are dropped and the hunter goes back to camp; the
  * hunt's HP, seed and tallies stay. Before the registry (schema 2) the hunt
- * was Velkhana and gains its species fields, nothing else changes. A current
- * game comes back unchanged.
+ * was Velkhana and gains its species fields, nothing else changes. Before the
+ * per-species tally (schema 4) every kill so far is counted as Velkhana's: the
+ * first three schemas only ever hunted her, and a schema-3 save that already
+ * slew another species cannot be told apart. A current game comes back unchanged.
  */
 export function migrate(saved: Game): Game {
   if (saved.saveSchemaVersion === SAVE_SCHEMA) return saved
+  const g = migrateHunt(saved)
+  g.slainBy ??= g.slain > 0 ? { velkhana: g.slain } : {}
+  g.saveSchemaVersion = SAVE_SCHEMA
+  return g
+}
+
+function migrateHunt(saved: Game): Game {
   const old = clone(saved)
+  if (old.saveSchemaVersion >= 3) return old
   if (old.saveSchemaVersion === 2) {
     return { ...old, saveSchemaVersion: SAVE_SCHEMA, hunt: old.hunt === null ? null : upgradeHunt(old.hunt) }
   }
@@ -628,6 +639,7 @@ function settle(g: Game): boolean {
 
   if (monsterFell) {
     g.slain += 1
+    g.slainBy[hunt.monsterId] = (g.slainBy[hunt.monsterId] ?? 0) + 1
     g.lastOutcome = hunterFell ? 'mutual_ko' : null
     if (hunterFell) g.carts += 1
     setMode(g, 'slain')

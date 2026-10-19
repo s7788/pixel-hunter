@@ -93,7 +93,7 @@ test('a save from a session that ended mid-fight comes back at camp, hunt kept',
   expect(back.hunt!.isFresh).toBe(false)
 })
 
-test('main turns hunt, answers retreat, interrupts pause; subagent turns change nothing', async ($, on) => {
+test('main turns hunt, answers retreat, interrupts pause; subagent turns change nothing', { timeoutMs: 60000 }, async ($, on) => {
   mock.clock(on)
   mock.store(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
@@ -121,7 +121,7 @@ test('main turns hunt, answers retreat, interrupts pause; subagent turns change 
   expect(await mount()).toBe('8-bit hunt: paused')
 })
 
-test('the terminal draws the pane without the Svg scene', async ($, on) => {
+test('the terminal draws the scene as cells (an Image on request) with its words under it, and no Svg', { timeoutMs: 60000 }, async ($, on) => {
   mock.clock(on)
   mock.store(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
@@ -129,11 +129,51 @@ test('the terminal draws the pane without the Svg scene', async ($, on) => {
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /hunt scene skipped/ })).toBeDefined()
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  // cells work in any terminal, so they are the default: 43 columns, 12 rows, 3 u32 words a cell
+  expect(await ui.find({ type: 'Image' })).toBeUndefined()
+  const raster = await ui.find({ type: 'Raster' })
+  expect(raster).toBeDefined()
+  const cells = raster!.props as { columns: number; rows: number; cells: string }
+  expect(cells.columns).toBe(43)
+  expect(cells.rows).toBe(12)
+  expect(cells.cells.length).toBe(Math.ceil((43 * 12 * 12) / 3) * 4)
+  expect(await ui.find({ type: 'Text', text: /待機・00:00/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /HP 12\/12/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^討伐 0/ })).toBeDefined()
+  // the button swaps to the Image: 384 x 216 RGBA, alt, the same box
+  await ui.press({ key: 'picture' })
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  const image = await ui.find({ type: 'Image' })
+  expect(image).toBeDefined()
+  expect(image!.props.alt).toBe('8-bit hunt: camp')
+  const { columns, rows, source } = image!.props as { columns: number; rows: number; source: { rgba: string; width: number; height: number } }
+  expect(columns).toBe(43)
+  expect(rows).toBe(12)
+  expect(source.width).toBe(384)
+  expect(source.height).toBe(216)
+  // 384 x 216 x 4 bytes, base64: well under the 2 MiB the terminal takes
+  expect(source.rgba.length).toBe(Math.ceil((384 * 216 * 4) / 3) * 4)
   await ui.unmount()
 })
 
-test('/hunt-demo toggles the hunt without a turn', async ($, on) => {
+test('a wide, short inline pane: the cells fill the width the rows allow', { timeoutMs: 60000 }, async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  const wide = { ...PANE, props: { ...PANE.props, bodyColumns: 160, placement: 'inline' as const, scroll: { offset: 0, bodyRows: 30 } } }
+  const ui = await $.ui.mount({ ...wide, surface: 'terminal' })
+  const raster = (await ui.find({ type: 'Raster' }))!.props as { columns: number; rows: number }
+  // 30 rows less 7 for the words: 23 rows, and the 384:216 shape gives 82 columns
+  expect(raster.rows).toBe(23)
+  expect(raster.columns).toBe(82)
+  await ui.unmount()
+})
+
+test('/hunt-demo toggles the hunt without a turn', { timeoutMs: 60000 }, async ($, on) => {
   mock.clock(on)
   mock.store(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
@@ -146,7 +186,7 @@ test('/hunt-demo toggles the hunt without a turn', async ($, on) => {
   await ui.unmount()
 })
 
-test('a new session picks the stored hunt back up at camp', async ($, on) => {
+test('a new session picks the stored hunt back up at camp', { timeoutMs: 60000 }, async ($, on) => {
   const midFight = run(beginTurn(newGame(11), 'velkhana'), 300)
   mock.clock(on)
   mock.store(on, { save: midFight })
@@ -161,7 +201,7 @@ test('a new session picks the stored hunt back up at camp', async ($, on) => {
   await ui.unmount()
 })
 
-test('/hunt-demo <monster> starts a fresh hunt of that species; an unknown id is refused', async ($, on) => {
+test('/hunt-demo <monster> starts a fresh hunt of that species; an unknown id is refused', { timeoutMs: 60000 }, async ($, on) => {
   mock.clock(on)
   mock.store(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))

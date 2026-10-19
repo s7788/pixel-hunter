@@ -174,7 +174,7 @@ test('G09: a schema-2 save is Velkhana, HP and the fight under way kept', () => 
   old.saveSchemaVersion = 2
   for (const key of ['monsterId', 'definitionVersion', 'state', 'stateT', 'parts', 'cooldowns']) delete (old.hunt as Record<string, unknown>)[key]
   const back = migrate(old)
-  expect(back.saveSchemaVersion).toBe(3)
+  expect(back.saveSchemaVersion).toBe(4)
   expect(back.hunt!.monsterId).toBe('velkhana')
   expect(back.hunt!.monsterHp).toBe(g.hunt!.monsterHp)
   expect(back.mode).toBe(g.mode)

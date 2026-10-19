@@ -1,6 +1,6 @@
 # hunt-8bit 交接（給接手的 Claude）
 
-這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、101 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
+這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、117 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
 
 ## 如何載入
 
@@ -37,7 +37,9 @@
 - `hooks/engine.ts`：純函式狀態機（`step`、`beginTurn`、`endTurn`、`restore`、`viewOf`）與逐魔物血量校正。
 - `hooks/monsters/`：魔物定義與註冊表（見下方「魔物註冊與大凶豺龍」）。
 - `hooks/data.ts`：獵人與營地的調校數值（魔物數值在各自的定義檔）。
-- `hooks/svg.ts`：格子轉 SVG、HUD、暫停遮罩、武器列。
+- `hooks/svg.ts`：格子轉 SVG、HUD、暫停遮罩、武器列、討伐統計列（`statsSvg`／`statsText`）、終端機的文字列（`hudText`）。
+- `hooks/shapes.ts`：營火、HP／ST 條、各種特效的「矩形清單」與 `placeActor`（角色放置與鏡像）；SVG 與 RGBA 兩邊共用，改外觀只改這裡。
+- `hooks/raster.ts`：把 View 畫成 384×216 RGBA（終端機的 `Image` 用）。
 - `hooks/sprites.ts`：讀 RLE 的 `hooks/gen/*.ts`。
 - `types/index.d.ts`：`$.state` 契約與狀態機型別（必須自包含，不能 import）。
 - `hooks/collision-data.ts`：手工量測的受擊框、攻擊框、走位用身體寬度（純 JSON 物件，工具可直接讀）。
@@ -200,12 +202,39 @@
 9. 硬直／倒地仍是 70／200：高 HP 魔物 20 場出現 300–490 次硬直，正式平衡時再調。
 10. 不做掃掠 AABB（沿用 v0.2 決定）；快速位移（衝刺每 tick 28px）理論上可能穿過窄框，目前框寬都大於每 tick 位移。
 
+## 討伐統計（v0.8）
+
+- pane 在狩獵畫面下方多一條獨立的小 Svg（384×24，不佔主畫面 131,072 的字數）：「討伐 N」加九隻魔物（依註冊順序）的 16×16 頭像與 ×隻數，沒討伐過的暗色。沒有 Svg 的介面（terminal）改一行字，例「討伐 7：冰呪龍×3 大凶豺龍×4」（只列討伐過的）。
+- 存檔 `saveSchemaVersion = 4`：`slainBy: Partial<Record<MonsterId, number>>`，在討伐結算處累加（雙方同歸於盡也算），加總恆等於 `slain`。**遷移：** 沒有 `slainBy` 的舊存檔（schema 3 以前）把既有的 `slain` 全數算給冰呪龍；schema 3 起已經能打新魔物，所以 v0.4–v0.7 期間的討伐無法區分，也一併算冰呪龍（需要時改 `slainBy` 即可）。schema 3 存檔遷移後保留進行中的戰鬥（只有 schema 2 以前才回營）。
+- 頭像：`tools/make_heads.py` 離線從各魔物 IDLE 第一格切出（窗口大小取頭部受擊框的長邊×1.3，位置在最左側的不透明像素＝吻部附近），BOX 縮到 16×16、對應回該魔物自己的調色盤，輸出 `hooks/gen/heads.ts`（RLE，約 10 KB），執行期不裁切。換 IDLE 圖或頭框後重跑。頭像是自動切的，蠻顎龍較偏鼻冠、迅龍偏暗，辨識度尚可但不精緻。
+
+## CLI 終端機（v0.9／v0.9.1）
+
+- 型別（`.claude-plugin/types/claude-code/index.d.ts`）：terminal 的元素表有 `Image`（`source` 可為 `{ rgba, width, height }` base64、解碼後上限 2 MiB，`columns`／`rows` 1–255，`alt` 必填；游標格不支援圖片的終端機畫 alt）；Desktop 沒有 `Image`、終端機沒有 `Svg`，所以 `register.tsx` 以 `e.surface` 與 `'Image' in els` 分支。`$.ui.blit` 可依 key 只換影像，這版沒用到：pane 本來就每 tick 重畫（終端機每秒最多 30 次，引擎會把相同的 `source` 略過），改成 key＋blit 要等實測有需要再做。
+- 畫法：`huntRgba(view, isFrozen)`。場景（128×72 放大 3 倍）快取成不透明底圖，每幀複製再疊：營火（`campRects`）→ 魔物 → 獵人 → 特效（`effectRects`）→ HP／ST 條 → 暫停遮罩（#0b1a3a 55%）。角色影格解碼後快取；放置與鏡像用和 SVG 相同的 `placeActor`（朝右 `tx + c`，鏡像 `tx - c - 1`）。SVG 版也改成吃同一份矩形清單，輸出的圖形不變。
+- **v0.9.5：寬 pane 支援。** `imageCells(bodyColumns, bodyRows)`：先用滿 pane 寬度（上限 255）、依 384:216 與字元 1:2 算列數；若超過 `bodyRows - TEXT_ROWS`（`TEXT_ROWS` = 7，保留給狀態、HP、標籤、切換按鈕、討伐統計、除錯），列數停在那裡、欄數依比例縮小（至少 4 列）。`register.tsx` 傳 `e.props.scroll.bodyRows`，字元與圖片模式共用同一個框。寬度來源：全螢幕版面的停靠 pane 寬度由引擎決定；`CLAUDE_CODE_NO_FLICKER=0` 的主畫面版面把 pane 放在輸入框上方、用滿寬度（API 文件說明，Windows Terminal 未實測）。README 有設定方式。
+- **v0.9.4：鏡頭改整個場景。** 使用者比較三種距離（只框交戰區、約 330px、整個場景）後選整個場景：`MIN_WINDOW = W`，`cameraWindow` 仍依格子比例取高、腳底在地面下 14px（49 欄 × 14 列時約 378×216）。`huntCells`／`cameraWindow` 多一個 `minWidth` 參數，傳較小的值可以再拉近。
+- **v0.9.3：四分之一方塊與輪廓。** 取樣格改成每格 2×2（`columns×2` × `rows×2`），再由 `quadrant()` 從四個像素的顏色中挑最合適的兩色、決定哪幾個像素用前景，對應到 16 個四分之一方塊字元之一（兩色以內完全精確）；水平解析度加倍、仍不混色。角色像素的上下左右若是場景，改成深色輪廓 `RIM`（#0a0c14）。四分之一方塊都是 BMP、寬度 1；Windows Terminal 會用內建字形畫方塊元素，其他終端機的字型若缺字會出現縫隙或問號（未實測）。字元版每幀 p50 約 2.6 ms。
+- **v0.9.2：字元格變清楚。** 參考 boss-fight mod（同樣是 Raster＋▀，但角色本來就畫成 16×14 像素的終端機尺寸）：`huntCells` 不再把整張 384×216 面積平均，而是 ①`cameraWindow` 只框交戰區（獵人左 30px 到魔物右 115px，至少 220px 寬，依格子比例取高、腳底在地面下 14px）；②角色、營火、特效先畫到透明圖層（`actorLayer`），每個像素若圖層蓋到 1/4 以上就取圖層的眾數色，否則取場景的眾數色並壓暗 40%（`SCENE_DIM`）；③暫停時再整體壓暗。測試確認輸出的每個顏色都來自調色盤（不混色）。字元版每幀 p50 約 4 ms（取眾數用 Map）。HP／ST 條不畫在字元版（文字列有數字）。
+- **v0.9.1：預設改字元格。** 使用者的 Windows Terminal 不支援圖片協定，Image 只剩 alt 文字。終端機現在預設畫 `Raster`（`huntCells`：把 `huntRgba` 的 384×216 面積平均成 `columns × rows×2`，每格 `▀`、前景＝上像素、背景＝下像素，base64 的 u32 三元組 [0x2580, fg, bg]），pane 上的按鈕（key `picture`，狀態 `terminalCells`，存 `$.store` 的 `terminalPicture`）可切成 Image；兩者的欄列同為 `imageCells(bodyColumns)`。程式無法偵測終端機是否支援圖片，所以以按鈕選擇。字元版每幀約 1–3 ms。引擎文件說 Raster 一幀最多 1024 組不同的前景／背景色對，超過的取最接近，場景色多時可能有色差，未實機確認。
+- 文字：圖下方 `hudText`（「狩獵中・雷狼龍（超帶電）・01:23」）、動作標籤一列、討伐統計一行；除錯碰撞框疊圖在終端機只寫「碰撞框疊圖僅 Desktop」。alt：「8-bit hunt: hunting — 雷狼龍」。
+- 尺寸：`imageCells(bodyColumns)`：columns＝pane 寬（上限 255），rows＝round(columns×216/384/2)，43 欄 → 12 列、80 欄 → 23 列。
+- 效能（測試內量測，`raster.test.ts` 會印出；含 base64、不含 JS→終端機的傳輸）：單獨執行 p50 0.4 ms、p95 0.8 ms、最大 2 ms（其中 base64 約 0.1–0.2 ms，runtime 有原生 `Uint8Array.toBase64`）；與其他測試檔平行時 p50 2.7 ms、p95 7.9 ms，皆遠低於 25 ms。每幀 RGBA 331 KB、base64 442 KB（上限 2 MiB）；實際傳到終端機的頻寬與終端機的解碼成本沒有量。
+- 未驗證：真實終端機上字元版與圖片版的顯示（只確認過 Windows Terminal 上圖片模式只剩文字）、每秒 8 次換圖是否流暢、Raster 的色彩近似。
+
+## 多個 session（現況，已決定先不處理）
+
+- 每個 session 的 `register` 各有自己的計時器與 `$.state` 世界；存檔只有一份 `$.store`（`save`），`advance` 每 80 tick（10 秒）、模式切換、回合開始與結束時整份覆寫，沒有版本號或合併，**最後寫入者為準**。新 session 啟動時 `restore` 讀到的是當下那份。
+- 後果：同時開多個 session，魔物血量會在各 session 的進度間跳動（後存的蓋掉先存的）；`slain`、`slainBy`、`carts` 可能少算（兩邊各自打死、只留最後一份）或重複（舊存檔被另一邊重新載入後再討伐一次）。魔物種類、部位、計量也一樣整份被覆蓋。
+- 建議使用者只在一個 session 開 hunt pane；使用者已選擇維持現狀、只寫進文件（README 有對應一節）。
+
 ## 待做（v2，依優先序）
 
-1. 太刀（L 系列）與弓（B 系列）：從 `images/04_longsword.png`、`05_bow.png` 擷取；這兩張板的格子裡畫了冰呪龍當距離參考，擷取時要排除。武器列目前畫在 SVG 裡且只有大劍可選；要改成營地內可切換的原生 Button，戰鬥中停用，並用 `pending_weapon` 在回營時套用。
+1. （未排入目前版本）太刀（L 系列）與弓（B 系列）：從 `images/04_longsword.png`、`05_bow.png` 擷取；這兩張板的格子裡畫了冰呪龍當距離參考，擷取時要排除。武器列目前畫在 SVG 裡、只有置中的大劍一格（「太刀 v2」「弓 v2」已移除，做完再加回）；要改成營地內可切換的原生 Button，戰鬥中停用，並用 `pending_weapon` 在回營時套用。
 2. 特效分層（吐息、刀光、冰屑成為獨立資產）。
 3. 補中間影格；其餘 75 組動作；V29 死亡。
 4. 九隻魔物的正式平衡（硬直／倒地門檻、迅龍力竭率、殲世滅盡龍俯衝命中率），以及 S05 換成正式美術。
+5. 多 session 一致性（見「多個 session」）：①單一主控租約——存檔裡記主控 session 與到期時間，只有持有者推進與寫入，其他 session 的 pane 唯讀顯示或提示；②狩獵與統計分開——每個 session 各打各的狩獵，只把討伐統計改成「只累加」的紀錄（以事件寫入、依 id 去重），不再整份覆寫。
 
 ## 已知注意事項
 
