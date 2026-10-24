@@ -2,7 +2,7 @@
 
 給要改這個 mod 的人：設計範圍、素材管線與已知限制。使用者介紹在 [README.md](../README.md)（中文版 [README.zh-TW.md](../README.zh-TW.md)），接手時的決策與檔案地圖在 [HANDOFF.md](../HANDOFF.md)。
 
-獵人（大劍、太刀或弓）跟著 Claude 的主回合出營、狩獵九隻魔物之一、撤退。魔物註冊、九隻魔物、討伐統計與 CLI 終端機畫面來自 `claude/compassionate-mahavira-8cfbac`（v0.4–v0.9.5），v0.10 與武器線合併。美術方向來自 `hunt_8bit_reference`（v1.2）參考包，以像素改編為準，不是原作素材。
+獵人（大劍、太刀或弓）跟著 Claude 的主回合出營、狩獵九隻魔物之一、撤退。魔物註冊、九隻魔物、討伐統計與 CLI 終端機畫面來自另一條開發線（v0.4–v0.9.5），v0.10 與武器線合併。美術方向來自 `hunt_8bit_reference`（v1.2）參考包，以像素改編為準，不是原作素材。
 
 ## 目前範圍
 
