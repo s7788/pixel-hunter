@@ -1,4 +1,4 @@
-# hunt-8bit
+# pixel-hunter
 
 **Claude 在工作，你的 8-bit 獵人在狩獵。**
 
@@ -13,7 +13,7 @@ Claude Code 的側邊 pane。你送出提示，獵人就出營去狩獵九隻魔
 在 Claude Code 終端機 session 的提示列輸入：
 
 ```
-/plugin install hunt-8bit --marketplace s7788/hunt-8bit
+/plugin install hunt-8bit --marketplace s7788/pixel-hunter
 ```
 
 按 `y` 新增 marketplace，再選安裝範圍，裝好立刻生效。
@@ -21,10 +21,10 @@ Claude Code 的側邊 pane。你送出提示，獵人就出營去狩獵九隻魔
 從 shell：
 
 ```bash
-claude plugin install hunt-8bit --marketplace s7788/hunt-8bit
+claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
 ```
 
-桌面版 app：點提示框旁的 **+** → **Plugins** → **Add marketplace**，填 `s7788/hunt-8bit`，再 **Add plugin**。
+桌面版 app：點提示框旁的 **+** → **Plugins** → **Add marketplace**，填 `s7788/pixel-hunter`，再 **Add plugin**。
 
 需要 Claude Code 2.1.275 以上（在桌面版 2.1.304 實測）。桌面版、VS Code 與手機畫像素圖；終端機用字元格畫，支援圖片的終端機（kitty、Ghostty、iTerm2、WezTerm、foot）也可以改成圖片，pane 上有按鈕切換。
 

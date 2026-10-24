@@ -1,4 +1,4 @@
-# hunt-8bit
+# pixel-hunter
 
 **An 8-bit hunter that fights while Claude works.**
 
@@ -13,7 +13,7 @@ A side pane for Claude Code. When you send Claude a prompt, your hunter leaves c
 At the prompt of a Claude Code terminal session:
 
 ```
-/plugin install hunt-8bit --marketplace s7788/hunt-8bit
+/plugin install hunt-8bit --marketplace s7788/pixel-hunter
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The plugin is active right away.
@@ -21,10 +21,10 @@ Answer `y` to add the marketplace, then pick a scope. The plugin is active right
 From a shell:
 
 ```bash
-claude plugin install hunt-8bit --marketplace s7788/hunt-8bit
+claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
 ```
 
-In the desktop app, click **+** next to the prompt box, then **Plugins** → **Add marketplace** with `s7788/hunt-8bit`, then **Add plugin**.
+In the desktop app, click **+** next to the prompt box, then **Plugins** → **Add marketplace** with `s7788/pixel-hunter`, then **Add plugin**.
 
 Needs Claude Code 2.1.275 or later (tested on 2.1.304 in the desktop app). The desktop app, VS Code and mobile draw the pixel art. The terminal draws it in character cells, or as an image in terminals that show images (kitty, Ghostty, iTerm2, WezTerm, foot); a button in the pane switches between the two.
 

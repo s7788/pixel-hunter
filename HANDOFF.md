@@ -287,4 +287,4 @@
 
 - `session.start` 在熱重載後會再跑一次；world 狀態放在 `$.state`，重載不會遺失，模組內變數會重置。
 - 測試裡 `mock.clock`、`mock.store`、`ui.open`、`session.start` 都要自己提供實作，否則 hook 會被略過。
-- repo 在 https://github.com/s7788/hunt-8bit；`.claude-plugin/marketplace.json` 讓它本身就是一個 marketplace（`/plugin install hunt-8bit --marketplace s7788/hunt-8bit`）。
+- repo 在 https://github.com/s7788/pixel-hunter；`.claude-plugin/marketplace.json` 讓它本身就是一個 marketplace（`/plugin install hunt-8bit --marketplace s7788/pixel-hunter`）。
