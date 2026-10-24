@@ -37,7 +37,7 @@
 - `hooks/register.tsx`：所有 hooks（turn、計時器、指令、pane 繪製、`$.store` 存檔）。
 - `hooks/engine.ts`：純函式狀態機（`step`、`beginTurn`、`endTurn`、`restore`、`viewOf`）與血量校正。
 - `hooks/data.ts`：全部調校數值，含 `WEAPONS`（各武器的待機姿勢、平常招式、硬直時的大招）。
-- `hooks/svg.ts`：格子轉 SVG、HUD、暫停遮罩、武器列。
+- `hooks/svg.ts`：格子轉 SVG、HUD、暫停遮罩、左下角的「武器 ○○」文字。
 - `hooks/sprites.ts`：讀 RLE 的 `hooks/gen/*.ts`。
 - `types/index.d.ts`：`$.state` 契約與狀態機型別（必須自包含，不能 import）。
 - `hooks/collision-data.ts`：手工量測的受擊框、攻擊框、走位用身體寬度（純 JSON 物件，工具可直接讀）。
@@ -81,7 +81,7 @@
 
 - 太刀（L01 待機、L02 縱斬連段、L03 袈裟斬、L05 氣刃大迴旋斬）與弓（B01 待機、B04 通常射擊、B05 快速射擊、B06 剛射）放在各自的群組 `ls`、`bow`（`hooks/gen/ls.ts`、`bow.ts`，各自 20 色調色盤），所以大劍與營地的影格一個像素都沒變。L01 只取 F1、F2，因為 F4 的腳比較低，會讓前三格浮起來。
 - 太刀板每格都畫了冰呪龍。排除方法：每格的右邊界設在冰呪龍最左側之前，刀光碰到牠的部分用 `blank` 塗掉，再加 `groundY`、`minIsland` 清掉虛線地面與碎片。被切到的刀光停在冰呪龍的輪廓前。弓板沒有魔物。
-- 選擇（`chooseWeapon`）：`weaponChoice` 是營地的選擇，`weapon` 是手上的武器。選固定武器時，在營地立刻換上；不在營地時（UI 不會發生）就等下次出營（`takeWeapon`），也就是原本規劃的 `pending_weapon`。「隨機」只在開新一場時抽，續打同一場不換。出營後 pane 的按鈕換成文字。
+- 選擇（`chooseWeapon`）：`weaponChoice` 是營地的選擇，`weapon` 是手上的武器。選固定武器時，在營地立刻換上；不在營地時（UI 不會發生）就等下次出營（`takeWeapon`），也就是原本規劃的 `pending_weapon`。「隨機」只在開新一場時抽，續打同一場不換。出營後 pane 的按鈕換成文字。按鈕留在圖片下方：Svg 是不能點的葉節點，圖片裡原本畫的武器框會被當成按鈕去點，所以改成左下角的純文字。
 - 待機：出了營地，`idle` 改用武器自己的姿勢（`hunterMove(g, 'idle')`）。跑步、翻滾、受擊、倒地仍是共通的 C 系列，參考板上畫的是揹著大劍。
 - 平衡：冰呪龍血量照舊用大劍校正。太刀與弓的傷害乘上 `damageScale(weapon)`：用同一個固定種子的模擬反覆跑 4 次求出，讓每 tick 的傷害等於大劍。不能只跑一次，因為傷害放大後冰呪龍更常硬直、倒地，打得更快。第一次拿到那把武器出營時校正，結果留在模組變數裡，熱重載後重算。
 - 存檔：`saveSchemaVersion = 3`。schema 2 的存檔補上大劍後照原狀繼續（不回營）；更舊的照舊遷移回營。

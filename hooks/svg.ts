@@ -1,4 +1,4 @@
-import type { HuntPhase, HuntWeapon } from '../types'
+import type { HuntPhase } from '../types'
 import { CAMP, HUNTER, VELKHANA, WEAPONS } from './data'
 import { attackReach, hitboxes, hurtboxes } from './collision'
 import type { Aabb, Placement } from './collision'
@@ -142,21 +142,12 @@ function bar(x: number, y: number, segs: number, filled: number, on: string, off
   return out
 }
 
-/** HUD_GUIDE's bottom row: the weapon in hand lit; the others dim while hunting (the camp's buttons pick). */
-function weapons(inHand: HuntWeapon, isLocked: boolean): string {
-  return (Object.keys(WEAPONS) as HuntWeapon[])
-    .map((id, i) => {
-      const x = 102 + i * 62
-      const isOn = id === inHand
-      const edge = isOn ? '#ffc23a' : '#3a4f8a'
-      const text = isLocked && !isOn ? '#6f7fa8' : '#f4f8ff'
-      return (
-        `<rect x="${x}" y="${H - 24}" width="56" height="18" fill="#10183a" stroke="${edge}" stroke-width="2"/>` +
-        `<text x="${x + 28}" y="${H - 11}" class="w" fill="${text}">${WEAPONS[id].label}</text>`
-      )
-    })
-    .join('')
-}
+/**
+ * The weapon in hand, as plain text: drawn boxes here read as buttons, but the
+ * picture takes no clicks (the camp's buttons under it pick).
+ */
+const weapon = (view: View): string =>
+  `<text x="8" y="${H - 11}" class="w">武器 ${WEAPONS[view.weapon].label}${view.isRandomWeapon ? '（隨機）' : ''}</text>`
 
 function hud(phase: HuntPhase, view: View, clock: string): string {
   const low = view.hp <= HUNTER.hpMax / 4
@@ -169,7 +160,7 @@ function hud(phase: HuntPhase, view: View, clock: string): string {
     `<text x="331" y="45" class="c">${clock}</text>` +
     `<text x="331" y="59" class="s">${PHASE_LABEL[phase]}</text>` +
     (view.label === '' ? '' : `<text x="192" y="${H - 34}" class="a">${view.label}</text>`) +
-    weapons(view.weapon, phase === 'hunting')
+    weapon(view)
   )
 }
 
@@ -205,7 +196,7 @@ const CSS =
   `.p{font:10px sans-serif;fill:#a9c8ef;text-anchor:middle}` +
   `.c{font:bold 14px monospace;fill:#ffd21f;text-anchor:middle}` +
   `.s{font:bold 12px sans-serif;fill:#ffc23a;text-anchor:middle}` +
-  `.w{font:bold 11px sans-serif;text-anchor:middle}` +
+  `.w{font:bold 11px sans-serif;fill:#f4f8ff;paint-order:stroke;stroke:#10183a;stroke-width:3px}` +
   `.z{font:bold 28px sans-serif;fill:#ffc23a;text-anchor:middle}` +
   `.bh{fill:#2ee05a;fill-opacity:.2;stroke:#2ee05a}` +
   `.bx{fill:#ff3030;fill-opacity:.3;stroke:#ff3030}` +

@@ -194,3 +194,32 @@ test('a long hunt with each weapon fits the Svg source limit', () => {
     expect(largest).toBeLessThan(131072)
   }
 })
+
+test('a press in camp after a real turn, with the clock ticking, changes the weapon', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.store(on, { save: run(beginTurn(newGame(11)), 300) })
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await clock.advance(5000)
+  await $.turn.complete({ reason: 'answer', turnId: 't1', answer: '' } as never)
+  await clock.advance(5000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /mode camp \/ greatsword/ })).toBeDefined()
+  await ui.press({ key: 'weapon-bow' })
+  await clock.advance(1000)
+  expect(await ui.find({ type: 'Text', text: /mode camp \/ bow/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the picture names the weapon in hand as text, with no boxes that look like buttons', () => {
+  const picked = viewOf(chooseWeapon(newGame(3), 'longsword'))
+  const svg = huntSvg('camp', picked, '00:00', false)
+  expect(svg).toContain('武器 太刀</text>')
+  expect(svg).not.toContain('大劍</text>')
+  expect(huntSvg('camp', viewOf(chooseWeapon(newGame(3), 'random')), '00:00', false)).toContain('（隨機）</text>')
+})

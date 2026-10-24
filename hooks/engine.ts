@@ -45,6 +45,7 @@ export type View = {
   hp: number
   stamina: number
   weapon: Weapon
+  isRandomWeapon: boolean
   label: string
   monsterHpPercent: number | null
   /** Debug: where recent hits met (the last MARK_TICKS ticks). */
@@ -758,6 +759,7 @@ export function viewOf(g: Game): View {
     hp: h.hp,
     stamina: h.stamina,
     weapon: g.weapon,
+    isRandomWeapon: g.weaponChoice === 'random',
     label: g.labelT < LABEL_TICKS ? g.label : '',
     monsterHpPercent: g.hunt === null ? null : Math.round((100 * g.hunt.monsterHp) / g.hunt.monsterHpMax),
     marks: inCamp
