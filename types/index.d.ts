@@ -13,9 +13,18 @@ export type HunterMoveId =
   | 'charge'
   | 'trueCharge'
   | 'tackle'
+  | 'lsChain'
+  | 'lsFade'
+  | 'lsRound'
+  | 'bowShot'
+  | 'bowQuick'
+  | 'bowPower'
   | 'walk'
   | 'roast'
   | 'eat'
+/** The weapon in hand; `random` draws one for each new hunt. */
+export type HuntWeapon = 'greatsword' | 'longsword' | 'bow'
+export type HuntWeaponChoice = HuntWeapon | 'random'
 export type MonsterMoveId = 'idle' | 'walk' | 'tailStab' | 'iceBeam' | 'flinch' | 'topple' | 'getup'
 
 /** The state machine's place: at camp, travelling, fighting, or leaving a fight. */
@@ -55,7 +64,7 @@ export type HuntRun = {
 }
 
 export type HuntGame = {
-  /** 2 since collision; older saves are migrated (attacks under way dropped). */
+  /** 3 since weapons (2 since collision); older saves are migrated. */
   saveSchemaVersion: number
   /** Simulation ticks (125 ms each); moves only when the game steps, never while paused. */
   simTick: number
@@ -67,6 +76,13 @@ export type HuntGame = {
   hunt: HuntRun | null
   /** Set when a hunt ends inside a turn: the next one waits for the next turn. */
   isResting: boolean
+  /** The weapon in hand; never changes during a trip out of camp. */
+  weapon: HuntWeapon
+  /**
+   * The camp's pick. A fixed weapon is taken up at once in camp, otherwise on
+   * the next trip out; `random` draws when a new hunt starts and keeps a hunt's weapon.
+   */
+  weaponChoice: HuntWeaponChoice
   hunter: HuntActor<HunterMoveId> & {
     hp: number
     stamina: number

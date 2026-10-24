@@ -2,7 +2,9 @@
   "groups": {
     "hunter": { "colors": 20, "anchor": "boots", "scale": { "images/03_greatsword.png": 1.25 } },
     "vel": { "colors": 16 },
-    "camp": { "colors": 20, "anchor": "boots" }
+    "camp": { "colors": 20, "anchor": "boots" },
+    "ls": { "colors": 20, "anchor": "boots", "scale": { "images/04_longsword.png": 1.25 } },
+    "bow": { "colors": 20, "anchor": "boots" }
   },
   "actions": [
     { "id": "C01", "group": "hunter", "board": "images/01_hunter_movement.png",
@@ -42,7 +44,27 @@
     { "id": "V25", "group": "vel", "board": "images/08_velkhana_states.png", "align": false, "anchorFrame": 0,
       "boxes": [[200, 582, 453, 687], [457, 582, 713, 687], [717, 582, 977, 687], [981, 582, 1247, 687]] },
     { "id": "V26", "group": "vel", "board": "images/08_velkhana_states.png", "align": false, "anchorFrame": 3,
-      "boxes": [[200, 695, 453, 805], [457, 695, 713, 805], [717, 695, 977, 805], [981, 695, 1247, 805]] }
+      "boxes": [[200, 695, 453, 805], [457, 695, 713, 805], [717, 695, 977, 805], [981, 695, 1247, 805]] },
+    { "id": "L01", "group": "ls", "board": "images/04_longsword.png", "groundY": 144, "minIsland": 24, "keepLeftOf": 80,
+      "boxes": [[227, 56, 345, 152], [480, 56, 737, 152]],
+      "blank": [[227, 56, 267, 76], [480, 56, 520, 76], [333, 56, 345, 121]] },
+    { "id": "L02", "group": "ls", "board": "images/04_longsword.png", "groundY": 244, "minIsland": 24,
+      "boxes": [[227, 157, 345, 251], [480, 157, 612, 251], [740, 157, 872, 251], [997, 157, 1113, 251]],
+      "blank": [[227, 157, 267, 177], [480, 157, 520, 177], [740, 157, 780, 177], [997, 157, 1037, 177], [858, 157, 884, 201]] },
+    { "id": "L03", "group": "ls", "board": "images/04_longsword.png", "groundY": 342, "minIsland": 24,
+      "boxes": [[227, 256, 322, 349], [480, 256, 600, 349], [740, 256, 878, 349], [997, 256, 1098, 349]],
+      "blank": [[227, 256, 267, 276], [480, 256, 520, 276], [740, 256, 780, 276], [997, 256, 1037, 276], [585, 256, 600, 292], [583, 256, 600, 312], [855, 256, 878, 322]] },
+    { "id": "L05", "group": "ls", "board": "images/04_longsword.png", "groundY": 536, "minIsland": 24,
+      "boxes": [[227, 451, 340, 543], [480, 451, 615, 543], [740, 451, 850, 543], [997, 451, 1093, 543]],
+      "blank": [[227, 451, 267, 471], [480, 451, 520, 471], [740, 451, 780, 471], [997, 451, 1037, 471], [596, 468, 615, 503]] },
+    { "id": "B01", "group": "bow", "board": "images/05_bow.png",
+      "boxes": [[268, 45, 503, 136], [507, 45, 746, 136], [750, 45, 986, 136], [990, 45, 1247, 136]] },
+    { "id": "B04", "group": "bow", "board": "images/05_bow.png",
+      "boxes": [[268, 337, 503, 428], [507, 337, 746, 428], [750, 337, 986, 428], [990, 337, 1247, 428]] },
+    { "id": "B05", "group": "bow", "board": "images/05_bow.png",
+      "boxes": [[268, 432, 503, 518], [507, 432, 746, 518], [750, 432, 986, 518], [990, 432, 1247, 518]] },
+    { "id": "B06", "group": "bow", "board": "images/05_bow.png",
+      "boxes": [[268, 522, 503, 613], [507, 522, 746, 613], [750, 522, 986, 613], [990, 522, 1247, 613]] }
   ],
   "scenes": [
     { "id": "S01", "file": "scenes/01_ancient_forest.png", "size": [128, 72], "colors": 16, "ground": 57 },

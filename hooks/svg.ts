@@ -1,5 +1,5 @@
-import type { HuntPhase } from '../types'
-import { CAMP, HUNTER, VELKHANA } from './data'
+import type { HuntPhase, HuntWeapon } from '../types'
+import { CAMP, HUNTER, VELKHANA, WEAPONS } from './data'
 import { attackReach, hitboxes, hurtboxes } from './collision'
 import type { Aabb, Placement } from './collision'
 import type { ActorView, View } from './engine'
@@ -142,21 +142,17 @@ function bar(x: number, y: number, segs: number, filled: number, on: string, off
   return out
 }
 
-/** HUD_GUIDE's bottom row: one selected weapon; switching is closed during a hunt. */
-function weapons(isLocked: boolean): string {
-  const slots = [
-    { label: '大劍', isOn: true, isV2: false },
-    { label: '太刀', isOn: false, isV2: true },
-    { label: '弓', isOn: false, isV2: true },
-  ]
-  return slots
-    .map((s, i) => {
+/** HUD_GUIDE's bottom row: the weapon in hand lit; the others dim while hunting (the camp's buttons pick). */
+function weapons(inHand: HuntWeapon, isLocked: boolean): string {
+  return (Object.keys(WEAPONS) as HuntWeapon[])
+    .map((id, i) => {
       const x = 102 + i * 62
-      const edge = s.isOn ? '#ffc23a' : '#3a4f8a'
-      const text = s.isV2 || (isLocked && !s.isOn) ? '#6f7fa8' : '#f4f8ff'
+      const isOn = id === inHand
+      const edge = isOn ? '#ffc23a' : '#3a4f8a'
+      const text = isLocked && !isOn ? '#6f7fa8' : '#f4f8ff'
       return (
         `<rect x="${x}" y="${H - 24}" width="56" height="18" fill="#10183a" stroke="${edge}" stroke-width="2"/>` +
-        `<text x="${x + 28}" y="${H - 11}" class="w" fill="${text}">${s.label}${s.isV2 ? ' v2' : ''}</text>`
+        `<text x="${x + 28}" y="${H - 11}" class="w" fill="${text}">${WEAPONS[id].label}</text>`
       )
     })
     .join('')
@@ -173,7 +169,7 @@ function hud(phase: HuntPhase, view: View, clock: string): string {
     `<text x="331" y="45" class="c">${clock}</text>` +
     `<text x="331" y="59" class="s">${PHASE_LABEL[phase]}</text>` +
     (view.label === '' ? '' : `<text x="192" y="${H - 34}" class="a">${view.label}</text>`) +
-    weapons(phase === 'hunting')
+    weapons(view.weapon, phase === 'hunting')
   )
 }
 

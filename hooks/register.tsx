@@ -2,9 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { HuntEvent, HuntPhase, HuntWorld } from '../types'
-import { TICK_MS } from './data'
+import { TICK_MS, WEAPON_CHOICES, WEAPONS } from './data'
 import type { Game } from './engine'
-import { beginTurn, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, chooseWeapon, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { HUNT_SIZE, huntSvg } from './svg'
 
 const PANE = 'hunt-8bit'
@@ -166,6 +166,8 @@ export const register: Register = on => {
     const view = viewOf(w.game)
     const source = huntSvg(p, view, fmt(elapsed), p === 'paused', isOpen && isBoxes)
     const g = w.game
+    // the weapon is picked in camp only; a fight, or a turn about to leave, locks it
+    const canChoose = g.mode === 'camp' && p !== 'hunting'
 
     return (
       <Box flexDirection="column">
@@ -173,6 +175,30 @@ export const register: Register = on => {
           <Svg source={source} alt={`8-bit hunt: ${p}`} width={HUNT_SIZE.width} height={HUNT_SIZE.height} />
         ) : (
           <Text dimColor>(this surface draws no Svg; hunt scene skipped)</Text>
+        )}
+        {canChoose ? (
+          <Box flexDirection="row">
+            {WEAPON_CHOICES.map(c => (
+              <Button
+                key={`weapon-${c.id}`}
+                plain
+                dimColor={c.id !== g.weaponChoice}
+                onPress={() =>
+                  serial(async () => {
+                    await save($, await changeGame($, x => chooseWeapon(x, c.id)))
+                    await note($, `weapon ${c.id}`)
+                  })
+                }
+              >
+                {`${c.id === g.weaponChoice ? '●' : '○'} ${c.label}  `}
+              </Button>
+            ))}
+          </Box>
+        ) : (
+          <Text dimColor>
+            武器 {WEAPONS[g.weapon].label}
+            {g.weaponChoice === 'random' ? '（隨機）' : ''}・回營後才能換
+          </Text>
         )}
         <Button
           key="debug"
@@ -199,7 +225,7 @@ export const register: Register = on => {
               {isBoxes ? '碰撞框 ■ 開' : '碰撞框 □ 關'}
             </Button>
             <Text dimColor>
-              phase {p} / mode {g.mode} / hunter {g.hunter.move} / monster {view.monster === null ? '-' : g.monster.move}
+              phase {p} / mode {g.mode} / {g.weapon} / hunter {g.hunter.move} / monster {view.monster === null ? '-' : g.monster.move}
             </Text>
             <Text dimColor>
               HP {g.hunter.hp} ST {g.hunter.stamina} / monster HP {view.monsterHpPercent ?? '-'}% / hunt #{g.huntNo} / slain{' '}

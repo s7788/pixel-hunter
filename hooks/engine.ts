@@ -4,13 +4,15 @@ import type {
   HuntGame as Game,
   HunterMoveId as HunterMove,
   HuntMode as Mode,
+  HuntWeapon as Weapon,
+  HuntWeaponChoice as WeaponChoice,
   MonsterMoveId as MonsterMove,
 } from '../types'
 import type { Placement } from './collision'
 import { contactPart, hitboxes, hurtboxes, reaches } from './collision'
 import { MOVE_BOUNDS } from './collision-data'
 import type { Move } from './data'
-import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS, VELKHANA } from './data'
+import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS, VELKHANA, WEAPONS } from './data'
 import type { ActionId, SceneId } from './sprites'
 import { SCENES } from './sprites'
 
@@ -27,7 +29,11 @@ import { SCENES } from './sprites'
 
 export type { Game }
 
-const hunterMove = (move: HunterMove): Move => HUNTER.moves[move]
+/** The hunter's move as drawn: out of camp, the idle stance is the weapon's own. */
+function hunterMove(g: Game, move: HunterMove): Move {
+  const stance: Move | undefined = move === 'idle' && g.mode !== 'camp' ? WEAPONS[g.weapon].idle : undefined
+  return stance ?? HUNTER.moves[move]
+}
 const monsterMove = (move: MonsterMove): Move => VELKHANA.moves[move]
 
 export type ActorView = { action: ActionId; frame: number; x: number; facing: 1 | -1 }
@@ -38,6 +44,7 @@ export type View = {
   monster: ActorView | null
   hp: number
   stamina: number
+  weapon: Weapon
   label: string
   monsterHpPercent: number | null
   /** Debug: where recent hits met (the last MARK_TICKS ticks). */
@@ -66,7 +73,7 @@ export function poseAt(move: Move, t: number): number {
 const loopPose = (move: Move, t: number): number => poseAt(move, t % sum(move.ticks))
 const isOver = (move: Move, t: number): boolean => t >= sum(move.ticks)
 
-const SAVE_SCHEMA = 2
+const SAVE_SCHEMA = 3
 const SCENE_SCALE = 3
 const HITS_KEPT = 30
 const MARK_TICKS = 8
@@ -107,6 +114,8 @@ export function newGame(seed: number): Game {
     huntNo: 0,
     hunt: null,
     isResting: false,
+    weapon: 'greatsword',
+    weaponChoice: 'greatsword',
     hunter: {
       move: 'idle',
       t: 0,
@@ -131,21 +140,85 @@ export function newGame(seed: number): Game {
   }
 }
 
-/** Monster HP that lasts about `targetMinutes` of hunting, from a fixed-seed run. */
-let calibrated: number | undefined
-export function monsterHpForTarget(): number {
-  if (calibrated === undefined) {
+/**
+ * Damage per tick a weapon deals in a fixed-seed run with its damage times
+ * `scale`. While it runs that scale is the weapon's (`calibrating`).
+ */
+let calibrating: number | undefined
+function damagePerTick(weapon: Weapon, scale: number): number {
+  calibrating = scale
+  try {
     let g = newGame(20261016)
+    g.weapon = weapon
+    g.weaponChoice = weapon
     startHunt(g, 1e9)
     g = beginTurn(g)
     const ticks = 6000
     for (let i = 0; i < ticks; i += 1) g = step(g, true)
-    const perTick = (1e9 - g.hunt!.monsterHp) / ticks
+    const out = (1e9 - g.hunt!.monsterHp) / ticks
     // no hit landed: a box or stance is off; never make a monster with no HP
-    if (!(perTick > 0)) throw new Error('hunt-8bit: calibration landed no hits; check the collision boxes and stances')
-    calibrated = Math.round(perTick * ((VELKHANA.targetMinutes * 60_000) / TICK_MS))
+    if (!(out > 0)) throw new Error(`hunt-8bit: calibration landed no ${weapon} hits; check the collision boxes and stances`)
+    return out
+  } finally {
+    calibrating = undefined
   }
-  return calibrated
+}
+
+let greatswordPerTick: number | undefined
+const gsPerTick = (): number => (greatswordPerTick ??= damagePerTick('greatsword', 1))
+
+/** Monster HP that lasts about `targetMinutes` of great sword hunting. */
+export function monsterHpForTarget(): number {
+  return Math.round(gsPerTick() * ((VELKHANA.targetMinutes * 60_000) / TICK_MS))
+}
+
+/**
+ * The factor on a weapon's damage that makes it as fast as the great sword.
+ * Bigger blows also flinch and topple the monster sooner, so the factor is
+ * refined over a few runs with it applied.
+ */
+const scales: Partial<Record<Weapon, number>> = { greatsword: 1 }
+export function damageScale(weapon: Weapon): number {
+  if (calibrating !== undefined) return calibrating
+  let scale = scales[weapon]
+  if (scale === undefined) {
+    scale = 1
+    for (let i = 0; i < 4; i += 1) scale *= gsPerTick() / damagePerTick(weapon, scale)
+    scales[weapon] = scale
+  }
+  return scale
+}
+
+/**
+ * The camp's weapon pick. A fixed weapon is taken up at once in camp; out of
+ * camp it waits for the next trip out (`takeWeapon`), as `random` always does.
+ */
+export function chooseWeapon(game: Game, choice: WeaponChoice): Game {
+  const g = clone(game)
+  g.weaponChoice = choice
+  if (g.mode === 'camp' && choice !== 'random') g.weapon = choice
+  return g
+}
+
+/** Leaving camp: put the pick in hand; `random` draws only for a new hunt. */
+function takeWeapon(g: Game, isNewHunt: boolean): void {
+  const choice = g.weaponChoice
+  if (choice !== 'random') g.weapon = choice
+  else if (isNewHunt) {
+    const all = Object.keys(WEAPONS) as Weapon[]
+    g.weapon = all[Math.floor(rand(g) * all.length)]!
+  }
+  damageScale(g.weapon) // calibrate now, not on the first hit
+}
+
+/** Out of camp toward the fight, starting a hunt if none is saved. */
+function leaveCamp(g: Game): void {
+  const isNewHunt = g.hunt === null
+  if (isNewHunt) startHunt(g)
+  takeWeapon(g, isNewHunt)
+  setMode(g, 'leaving')
+  g.hunter.facing = 1
+  hunterDo(g, 'run')
 }
 
 function startHunt(g: Game, hp: number = monsterHpForTarget()): void {
@@ -170,8 +243,8 @@ function startAttack(g: Game, source: 'hunter' | 'monster', move: Move): Attack 
 function hunterDo(g: Game, move: HunterMove): void {
   g.hunter.move = move
   g.hunter.t = 0
-  g.hunter.stamina = Math.max(0, g.hunter.stamina - (hunterMove(move).stamina ?? 0))
-  g.hunter.attack = startAttack(g, 'hunter', hunterMove(move))
+  g.hunter.stamina = Math.max(0, g.hunter.stamina - (hunterMove(g, move).stamina ?? 0))
+  g.hunter.attack = startAttack(g, 'hunter', hunterMove(g, move))
 }
 
 function monsterDo(g: Game, move: MonsterMove): void {
@@ -184,12 +257,7 @@ function monsterDo(g: Game, move: MonsterMove): void {
 export function beginTurn(game: Game): Game {
   const g = clone(game)
   g.isResting = false
-  if (g.mode === 'camp') {
-    if (g.hunt === null) startHunt(g)
-    setMode(g, 'leaving')
-    g.hunter.facing = 1
-    hunterDo(g, 'run')
-  }
+  if (g.mode === 'camp') leaveCamp(g)
   return g
 }
 
@@ -211,16 +279,19 @@ export function endTurn(game: Game): Game {
 }
 
 /**
- * A game from before collision (no schema 2): attacks under way had no contact
- * record, so they are dropped and the hunter goes back to camp; the hunt's HP,
- * seed and tallies stay. A current game comes back unchanged.
+ * A game from before weapons (schema 2) gets the great sword and plays on as
+ * it was. One from before collision (no schema 2): attacks under way had no
+ * contact record, so they are dropped and the hunter goes back to camp; the
+ * hunt's HP, seed and tallies stay. A current game comes back unchanged.
  */
 export function migrate(saved: Game): Game {
   if (saved.saveSchemaVersion === SAVE_SCHEMA) return saved
   const old = clone(saved)
+  const armed = { saveSchemaVersion: SAVE_SCHEMA, weapon: old.weapon ?? 'greatsword', weaponChoice: old.weaponChoice ?? 'greatsword' }
+  if (old.saveSchemaVersion === 2) return { ...old, ...armed }
   const g: Game = {
     ...old,
-    saveSchemaVersion: SAVE_SCHEMA,
+    ...armed,
     simTick: 0,
     nextAttackSerial: 0,
     lastOutcome: null,
@@ -276,12 +347,8 @@ export function step(game: Game, working: boolean): Game {
   g.monster.t += 1
   switch (g.mode) {
     case 'camp':
-      if (working && !g.isResting && g.modeT >= CAMP_DELAY) {
-        if (g.hunt === null) startHunt(g)
-        setMode(g, 'leaving')
-        g.hunter.facing = 1
-        hunterDo(g, 'run')
-      } else campRest(g)
+      if (working && !g.isResting && g.modeT >= CAMP_DELAY) leaveCamp(g)
+      else campRest(g)
       break
     case 'leaving':
       // from wherever the hunter was resting, off the right edge in RUN_TICKS
@@ -354,7 +421,7 @@ const groundOf = (g: Game): number => SCENES[g.hunt!.scene].ground * SCENE_SCALE
 const hunterAt = (g: Game): Placement => ({ x: g.hunter.x, groundY: groundOf(g), renderFlip: g.hunter.facing })
 const monsterAt = (g: Game): Placement => ({ x: g.monster.x, groundY: groundOf(g), renderFlip: 1 })
 const hunterPose = (g: Game): [ActionId, number] => {
-  const move = hunterMove(g.hunter.move)
+  const move = hunterMove(g, g.hunter.move)
   return [move.action, poseOf(g.hunter.move, move, g.hunter.t)]
 }
 const monsterPose = (g: Game): [ActionId, number] => {
@@ -369,6 +436,12 @@ const monsterMinX = (g: Game): number =>
 
 const isInvulnerable = (g: Game): boolean =>
   g.hunter.move === 'roll' && (HUNTER.rollInvulnerable as readonly number[]).includes(poseAt(HUNTER.moves.roll, g.hunter.t))
+
+/** The hunter's blow, scaled so every weapon hunts about as fast. */
+const hunterDamage = (g: Game): number => {
+  const raw = hunterMove(g, g.hunter.move).damage ?? 0
+  return Math.round(raw * damageScale(g.weapon) * 100) / 100
+}
 
 type Contact = { source: 'hunter' | 'monster'; attack: Attack; part: string; x: number; y: number; outcome: Outcome; damage: number }
 
@@ -396,7 +469,7 @@ function findContacts(g: Game): Contact[] {
   if (h.attack !== null && !h.attack.contacts.some(c => c.target === 'monster')) {
     const touch = contactPart(hitboxes(hAction, hPose, hunterAt(g)), hurtboxes(mAction, mPose, monsterAt(g)))
     if (touch !== undefined) {
-      out.push({ source: 'hunter', attack: h.attack, part: touch.part, ...touch.point, outcome: 'damaged', damage: hunterMove(h.move).damage ?? 0 })
+      out.push({ source: 'hunter', attack: h.attack, part: touch.part, ...touch.point, outcome: 'damaged', damage: hunterDamage(g) })
     }
   }
   return out
@@ -503,7 +576,7 @@ function fight(g: Game): void {
   }
 
   // hunter: finish moves, roll travel, pending dodge, run in, regen, then decide
-  const hNow: Move = hunterMove(h.move)
+  const hNow: Move = hunterMove(g, h.move)
   if (h.move === 'roll') h.x = Math.max(HUNTER.minX, h.x - HUNTER.rollDistance / sum(hNow.ticks))
   if (h.move !== 'idle' && h.move !== 'run' && isOver(hNow, h.t)) {
     h.facing = 1
@@ -534,12 +607,12 @@ function fight(g: Game): void {
   hunterDecide(g)
 }
 
-const can = (g: Game, move: HunterMove): boolean => g.hunter.stamina >= (hunterMove(move).stamina ?? 0)
+const can = (g: Game, move: HunterMove): boolean => g.hunter.stamina >= (hunterMove(g, move).stamina ?? 0)
 
 /** Would this hunter attack touch the monster from where the hunter stands? */
 function hunterReaches(g: Game, move: HunterMove): boolean {
   const [mAction, mPose] = monsterPose(g)
-  return reaches(hunterMove(move).action, { ...hunterAt(g), renderFlip: 1 }, mAction, mPose, monsterAt(g))
+  return reaches(hunterMove(g, move).action, { ...hunterAt(g), renderFlip: 1 }, mAction, mPose, monsterAt(g))
 }
 
 function hunterDecide(g: Game): void {
@@ -547,11 +620,11 @@ function hunterDecide(g: Game): void {
   const m = g.monster
   const opening = m.move === 'flinch' || m.move === 'topple'
   let choice: HunterMove | 'wait'
-  if (opening) choice = can(g, 'trueCharge') ? 'trueCharge' : can(g, 'charge') ? 'charge' : can(g, 'tackle') ? 'tackle' : 'wait'
+  const weapon = WEAPONS[g.weapon]
+  if (opening) choice = weapon.openers.find(move => can(g, move)) ?? 'wait'
   else {
     const options: [HunterMove | 'wait', number][] = [['wait', HUNTER.waitWeight]]
-    if (can(g, 'charge')) options.push(['charge', HUNTER.moves.charge.weight])
-    if (can(g, 'tackle')) options.push(['tackle', HUNTER.moves.tackle.weight])
+    for (const move of weapon.attacks) if (can(g, move)) options.push([move, hunterMove(g, move).weight ?? 0])
     choice = pick(g, options)
   }
   if (choice === 'wait') {
@@ -571,7 +644,7 @@ function attack(g: Game, move: HunterMove): void {
   g.hunter.facing = 1
   g.hunter.intent = null
   hunterDo(g, move)
-  say(g, { charge: '蓄力斬', trueCharge: '真蓄力斬', tackle: '肩撞' }[move as 'charge' | 'trueCharge' | 'tackle'])
+  say(g, hunterMove(g, move).label ?? '')
 }
 
 /** One running step toward the monster; swing when in reach, give up when blocked. */
@@ -680,10 +753,11 @@ export function viewOf(g: Game): View {
   const h = g.hunter
   return {
     scene: inCamp || g.hunt === null ? CAMP_SCENE : g.hunt.scene,
-    hunter: actorView(hunterMove(h.move), h, h.facing, LOOPING.has(h.move)),
+    hunter: actorView(hunterMove(g, h.move), h, h.facing, LOOPING.has(h.move)),
     monster: inCamp || g.hunt === null ? null : actorView(monsterMove(g.monster.move), g.monster, 1, LOOPING.has(g.monster.move)),
     hp: h.hp,
     stamina: h.stamina,
+    weapon: g.weapon,
     label: g.labelT < LABEL_TICKS ? g.label : '',
     monsterHpPercent: g.hunt === null ? null : Math.round((100 * g.hunt.monsterHp) / g.hunt.monsterHpMax),
     marks: inCamp

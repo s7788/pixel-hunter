@@ -40,6 +40,19 @@ export const BOXES: Readonly<Record<ActionId, ActionBoxes>> = {
     { "hunter_body": [-25, -55, 30, 0] }
   ], "hit": { "pose": 3, "boxes": [[42, -34, 80, -2]] } },
   "G06": { "hurt": [{ "hunter_body": [-20, -58, 40, 0] }], "hit": { "pose": 2, "boxes": [[25, -60, 55, -15]] } },
+  "L01": { "hurt": [{ "hunter_body": [-20, -60, 22, 0] }] },
+  "L02": { "hurt": [{ "hunter_body": [-20, -62, 24, 0] }], "hit": { "pose": 1, "boxes": [[40, -100, 78, -50], [25, -50, 78, -2]] } },
+  "L03": { "hurt": [{ "hunter_body": [-20, -60, 24, 0] }], "hit": { "pose": 1, "boxes": [[20, -34, 62, -8]] } },
+  "L05": { "hurt": [
+    { "hunter_body": [-18, -62, 24, 0] },
+    { "hunter_body": [-10, -52, 30, 0] },
+    { "hunter_body": [-10, -58, 32, 0] },
+    { "hunter_body": [-12, -72, 24, 0] }
+  ], "hit": { "pose": 1, "boxes": [[-60, -92, 92, -8]] } },
+  "B01": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }] },
+  "B04": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }], "hit": { "pose": 2, "boxes": [[55, -50, 150, -34]] } },
+  "B05": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }], "hit": { "pose": 2, "boxes": [[55, -76, 142, -12]] } },
+  "B06": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }], "hit": { "pose": 2, "boxes": [[50, -80, 152, -8]] } },
   "V01": { "hurt": [{ "head": [-108, -85, -60, -22], "body": [-62, -80, 25, 0], "tail": [25, -36, 92, 0] }] },
   "V02": { "hurt": [{ "head": [-115, -82, -75, -20], "body": [-75, -88, 15, 0], "tail": [15, -40, 97, 0] }] },
   "V14": { "hurt": [

@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { HUNTER, TICK_MS, VELKHANA } from './data'
 import type { Game } from './engine'
-import { beginTurn, endTurn, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, chooseWeapon, endTurn, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
 
 const PANE = {
@@ -158,4 +158,39 @@ test('a new session picks the stored hunt back up at camp', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /mode camp/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: new RegExp(`hunt #${midFight.huntNo}`) })).toBeDefined()
   await ui.unmount()
+})
+
+test('camp shows the weapon buttons; a press takes the weapon up; a hunt locks them', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.findAll({ type: 'Button', text: /^[●○] / })).toHaveLength(4)
+  await ui.press({ key: 'weapon-longsword' })
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /mode camp \/ longsword/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'weapon-longsword', text: /● 太刀/ })).toBeDefined()
+  await ui.unmount()
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.findAll({ type: 'Button', text: /^[●○] / })).toHaveLength(0)
+  expect(await ui.find({ type: 'Text', text: /武器 太刀/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a long hunt with each weapon fits the Svg source limit', () => {
+  for (const weapon of ['longsword', 'bow'] as const) {
+    let g = beginTurn(chooseWeapon(newGame(7), weapon))
+    let largest = 0
+    for (let i = 0; i < 3000; i += 1) {
+      g = step(g, true)
+      largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', i % 2 === 0, true).length)
+    }
+    expect(largest).toBeLessThan(131072)
+  }
 })

@@ -119,7 +119,7 @@ def drop_hairlines(mask, rows=12, min_run=8):
             x = max(end, x + 1)
 
 
-def drop_islands(mask, keep_left_of=None):
+def drop_islands(mask, keep_left_of=None, min_island=MIN_ISLAND):
     h, w = len(mask), len(mask[0])
     seen = [[False] * w for _ in range(h)]
     for y in range(h):
@@ -136,7 +136,7 @@ def drop_islands(mask, keep_left_of=None):
                         seen[ny][nx] = True
                         q.append((nx, ny))
             far = keep_left_of is not None and min(c[0] for c in comp) > keep_left_of
-            if len(comp) < MIN_ISLAND or far:
+            if len(comp) < min_island or far:
                 for cx, cy in comp:
                     mask[cy][cx] = False
 
@@ -151,8 +151,11 @@ def frame_rgba(board, box, blanks, action):
             crop.paste(background(crop), (x0, y0, x1, y1))
     mask = mask_of(crop)
     cut_ground(mask)
+    if 'groundY' in action:  # a dashed ground line cut_ground cannot see: clear from that board row down
+        for y in range(max(0, action['groundY'] - box[1]), crop.height):
+            mask[y] = [False] * crop.width
     drop_hairlines(mask)
-    drop_islands(mask, action.get('keepLeftOf'))
+    drop_islands(mask, action.get('keepLeftOf'), action.get('minIsland', MIN_ISLAND))
     rgba = crop.convert('RGBA')
     px = rgba.load()
     for y in range(crop.height):

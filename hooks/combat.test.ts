@@ -1,14 +1,17 @@
 import { expect, test } from 'claude-code/testing'
 
-import type { HuntAttack } from '../types'
-import { CAMP, HUNTER, TICK_MS, VELKHANA } from './data'
+import type { HuntAttack, HuntWeapon } from '../types'
+import { CAMP, HUNTER, TICK_MS, VELKHANA, WEAPONS } from './data'
 import type { Game } from './engine'
-import { beginTurn, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, chooseWeapon, damageScale, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
 
+/** A new game holding this weapon from the first trip out. */
+const armed = (seed: number, weapon: HuntWeapon = 'greatsword'): Game => chooseWeapon(newGame(seed), weapon)
+
 /** A fight with both sides parked: nobody decides anything for a long while. */
-function parked(seed = 1): Game {
-  let g = beginTurn(newGame(seed))
+function parked(seed = 1, weapon: HuntWeapon = 'greatsword'): Game {
+  let g = beginTurn(armed(seed, weapon))
   while (g.mode !== 'fight') g = step(g, true)
   g.hunter = { ...g.hunter, move: 'idle', t: 0, x: HUNTER.x, wait: 999, rollIn: -1, intent: null, attack: null, facing: 1 }
   g.monster = { ...g.monster, move: 'idle', t: 0, x: VELKHANA.minX + 38, wait: 999, attack: null }
@@ -29,6 +32,13 @@ function tailStabIn(g: Game, before: number): Game {
 const run = (g: Game, ticks: number): Game => {
   let out = g
   for (let i = 0; i < ticks; i += 1) out = step(out, true)
+  return out
+}
+
+/** Ticks with no turn running (back to camp, resting). */
+const rest = (g: Game, ticks: number): Game => {
+  let out = g
+  for (let i = 0; i < ticks; i += 1) out = step(out, false)
   return out
 }
 
@@ -140,7 +150,7 @@ test('C27/C28: an old save migrates to camp, HP kept, nothing under way', () => 
   const old = JSON.parse(JSON.stringify(g)) as Record<string, unknown>
   for (const key of ['saveSchemaVersion', 'simTick', 'nextAttackSerial', 'lastOutcome', 'hits']) delete old[key]
   const back = migrate(old as unknown as Game)
-  expect(back.saveSchemaVersion).toBe(2)
+  expect(back.saveSchemaVersion).toBe(3)
   expect(back.mode).toBe('camp')
   expect(back.hunt?.monsterHp).toBe(g.hunt?.monsterHp)
   expect(back.hunter.attack).toBeNull()
@@ -179,59 +189,66 @@ test('C31/C35: the same seed replays the same hits; drawing boxes changes nothin
   expect(a.hits.length).toBeGreaterThan(0)
 })
 
-test('C36: from the usual stances the hunter runs in and lands all three swings', { timeoutMs: 60000 }, () => {
-  const landed = new Set<string>()
-  let tried = 0
-  for (let seed = 1; seed <= 6 && landed.size < 3; seed += 1) {
-    let g = beginTurn(newGame(seed))
-    for (let i = 0; i < 4000; i += 1) {
-      const move = g.hunter.move
-      g = step(g, true)
-      for (const hit of g.hits) if (hit.tick === g.simTick && hit.target === 'monster' && hit.outcome === 'damaged') landed.add(move)
-      tried += 1
-    }
-  }
-  expect([...landed].sort()).toEqual(['charge', 'tackle', 'trueCharge'])
-  expect(tried).toBeGreaterThan(0)
-})
+const SWINGS: Record<HuntWeapon, string[]> = {
+  greatsword: ['charge', 'tackle', 'trueCharge'],
+  longsword: ['lsChain', 'lsFade', 'lsRound'],
+  bow: ['bowPower', 'bowQuick', 'bowShot'],
+}
 
-test('40 hunts average the target minutes (±20%); stats and tick time printed', { timeoutMs: 300000 }, () => {
-  const minutes: number[] = []
-  let carted = 0
-  const tally = { swings: 0, landed: 0, monsterAttacks: 0, hunterHit: 0, evaded: 0, rolls: 0 }
-  const ms: number[] = []
-  for (let seed = 1; seed <= 40; seed += 1) {
-    let g = beginTurn(newGame(seed * 7919))
-    let t = 0
-    while (g.slain === 0 && t < 40000) {
-      const prev = g
-      const t0 = Date.now()
-      g = step(g, true)
-      ms.push(Date.now() - t0)
-      t += 1
-      if (g.hunter.attack !== null && g.hunter.attack.id !== prev.hunter.attack?.id) tally.swings += 1
-      if (g.hunter.move === 'roll' && prev.hunter.move !== 'roll') tally.rolls += 1
-      if (g.monster.attack !== null && g.monster.attack.id !== prev.monster.attack?.id) tally.monsterAttacks += 1
-      for (const hit of g.hits) {
-        if (hit.tick !== g.simTick) continue
-        if (hit.target === 'monster') tally.landed += 1
-        else if (hit.outcome === 'evaded') tally.evaded += 1
-        else tally.hunterHit += 1
+for (const weapon of Object.keys(WEAPONS) as HuntWeapon[]) {
+  test(`C36: from the usual stances the hunter (${weapon}) runs in and lands all three swings`, { timeoutMs: 60000 }, () => {
+    const landed = new Set<string>()
+    for (let seed = 1; seed <= 6 && landed.size < 3; seed += 1) {
+      let g = beginTurn(armed(seed, weapon))
+      for (let i = 0; i < 4000; i += 1) {
+        const move = g.hunter.move
+        g = step(g, true)
+        for (const hit of g.hits) if (hit.tick === g.simTick && hit.target === 'monster' && hit.outcome === 'damaged') landed.add(move)
       }
     }
-    minutes.push((t * TICK_MS) / 60000)
-    if (g.carts > 0) carted += 1
-  }
-  const avg = minutes.reduce((a, b) => a + b, 0) / minutes.length
-  ms.sort((a, b) => a - b)
-  const p95 = ms[Math.floor(ms.length * 0.95)]
-  const out = (globalThis as unknown as { console: { log(text: string): void } }).console
-  out.log(
-    JSON.stringify({ avgMinutes: +avg.toFixed(2), cartRate: carted / 40, ...tally, tickP95ms: p95, tickMaxMs: ms[ms.length - 1] }),
-  )
-  expect(avg).toBeGreaterThan(VELKHANA.targetMinutes * 0.8)
-  expect(avg).toBeLessThan(VELKHANA.targetMinutes * 1.2)
-})
+    expect([...landed].sort()).toEqual(SWINGS[weapon])
+  })
+}
+
+for (const weapon of Object.keys(WEAPONS) as HuntWeapon[]) {
+  test(`40 hunts (${weapon}) average the target minutes (±20%); stats and tick time printed`, { timeoutMs: 300000 }, () => {
+    const minutes: number[] = []
+    let carted = 0
+    const tally = { swings: 0, landed: 0, monsterAttacks: 0, hunterHit: 0, evaded: 0, rolls: 0 }
+    const ms: number[] = []
+    for (let seed = 1; seed <= 40; seed += 1) {
+      let g = beginTurn(armed(seed * 7919, weapon))
+      let t = 0
+      while (g.slain === 0 && t < 40000) {
+        const prev = g
+        const t0 = Date.now()
+        g = step(g, true)
+        ms.push(Date.now() - t0)
+        t += 1
+        if (g.hunter.attack !== null && g.hunter.attack.id !== prev.hunter.attack?.id) tally.swings += 1
+        if (g.hunter.move === 'roll' && prev.hunter.move !== 'roll') tally.rolls += 1
+        if (g.monster.attack !== null && g.monster.attack.id !== prev.monster.attack?.id) tally.monsterAttacks += 1
+        for (const hit of g.hits) {
+          if (hit.tick !== g.simTick) continue
+          if (hit.target === 'monster') tally.landed += 1
+          else if (hit.outcome === 'evaded') tally.evaded += 1
+          else tally.hunterHit += 1
+        }
+      }
+      minutes.push((t * TICK_MS) / 60000)
+      if (g.carts > 0) carted += 1
+    }
+    const avg = minutes.reduce((a, b) => a + b, 0) / minutes.length
+    ms.sort((a, b) => a - b)
+    const p95 = ms[Math.floor(ms.length * 0.95)]
+    const out = (globalThis as unknown as { console: { log(text: string): void } }).console
+    out.log(
+      JSON.stringify({ weapon, avgMinutes: +avg.toFixed(2), cartRate: carted / 40, ...tally, tickP95ms: p95, tickMaxMs: ms[ms.length - 1] }),
+    )
+    expect(avg).toBeGreaterThan(VELKHANA.targetMinutes * 0.8)
+    expect(avg).toBeLessThan(VELKHANA.targetMinutes * 1.2)
+  })
+}
 
 test('camp between turns: walk to the fire, roast, eat, roast again; HP already full', () => {
   let g = newGame(2)
@@ -269,13 +286,14 @@ test('a turn pulls the hunter away from the fire at once and off the right edge'
 })
 
 test('the hunter never starts a swing into a monster attack that would reach; one dodge draw per attack', () => {
-  for (let seed = 1; seed <= 20; seed += 1) {
-    let g = tailStabIn(parked(seed), 6)
+  for (let seed = 1; seed <= 60; seed += 1) {
+    const weapon = (Object.keys(WEAPONS) as HuntWeapon[])[seed % 3]!
+    let g = tailStabIn(parked(seed, weapon), 6)
     g.hunter.wait = 1
     const draws: string[] = []
     for (let i = 0; i < 9; i += 1) {
       g = step(g, true)
-      expect(['charge', 'trueCharge', 'tackle']).not.toContain(g.hunter.move)
+      expect(SWINGS[weapon]).not.toContain(g.hunter.move)
       if (g.hunter.dodgeFor !== null && !draws.includes(g.hunter.dodgeFor)) draws.push(g.hunter.dodgeFor)
     }
     expect(draws.length).toBeLessThanOrEqual(1)
@@ -294,4 +312,70 @@ test('a hit records where the boxes met, and the debug view marks it for a momen
   g.hunter = { ...g.hunter, move: 'idle', t: 0, wait: 999 }
   g = run(g, 8)
   expect(viewOf(g).marks).toEqual([])
+})
+
+test('a weapon picked in camp is in hand at once; the fight draws its own stance', () => {
+  let g = chooseWeapon(newGame(3), 'bow')
+  expect(g.weapon).toBe('bow')
+  expect(viewOf(g).hunter.action).toBe('C01')
+  g = beginTurn(g)
+  while (g.mode !== 'fight') g = step(g, true)
+  g = step(g, true)
+  expect(viewOf(g).weapon).toBe('bow')
+  if (g.hunter.move === 'idle') expect(viewOf(g).hunter.action).toBe('B01')
+})
+
+test('a pick made out of camp waits for the next trip out, and never changes the fight', () => {
+  let g = run(beginTurn(armed(5, 'greatsword')), 200)
+  expect(g.mode).toBe('fight')
+  g = chooseWeapon(g, 'longsword')
+  expect(g.weapon).toBe('greatsword')
+  g = run(g, 50)
+  expect(g.weapon).toBe('greatsword')
+  g = rest(endTurn(g), 30)
+  expect(g.mode).toBe('camp')
+  g = beginTurn(g)
+  expect(g.weapon).toBe('longsword')
+})
+
+test('random draws a weapon for each new hunt and keeps it for a hunt carried over', () => {
+  const drawn = new Set<HuntWeapon>()
+  let g = chooseWeapon(newGame(8), 'random')
+  for (let i = 0; i < 12; i += 1) {
+    g = beginTurn(g)
+    const weapon = g.weapon
+    drawn.add(weapon)
+    // carried over to the next turn: the same weapon
+    g = rest(endTurn(run(g, 60)), 30)
+    g = beginTurn(g)
+    expect(g.weapon).toBe(weapon)
+    // slain: the next hunt draws again
+    g.hunt!.monsterHp = 0.5
+    g = run(g, 400)
+    expect(g.hunt).toBeNull()
+    g.isResting = false
+  }
+  expect(drawn.size).toBe(3)
+})
+
+test('every weapon is scaled to the great sword pace; the great sword is unscaled', () => {
+  expect(damageScale('greatsword')).toBe(1)
+  for (const weapon of ['longsword', 'bow'] as const) {
+    expect(damageScale(weapon)).toBeGreaterThan(0.2)
+    expect(damageScale(weapon)).toBeLessThan(5)
+  }
+})
+
+test('a save from before weapons (schema 2) gets the great sword and plays on', () => {
+  const g = run(beginTurn(newGame(4)), 300)
+  const old = JSON.parse(JSON.stringify(g)) as Record<string, unknown>
+  old.saveSchemaVersion = 2
+  delete old.weapon
+  delete old.weaponChoice
+  const back = migrate(old as unknown as Game)
+  expect(back.saveSchemaVersion).toBe(3)
+  expect(back.weapon).toBe('greatsword')
+  expect(back.weaponChoice).toBe('greatsword')
+  expect(back.mode).toBe(g.mode)
+  expect(JSON.stringify(step(back, true).hunt)).toBe(JSON.stringify(step(g, true).hunt))
 })

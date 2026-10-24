@@ -1,5 +1,7 @@
+import { BOW } from './gen/bow'
 import { CAMP } from './gen/camp'
 import { HUNTER } from './gen/hunter'
+import { LS } from './gen/ls'
 import { SCENES } from './gen/scenes'
 import { VEL } from './gen/vel'
 
@@ -12,10 +14,15 @@ export type Sprite = {
   frames: readonly (readonly RleRow[])[]
 }
 
-export type ActionId = keyof typeof HUNTER.actions | keyof typeof CAMP.actions | keyof typeof VEL.actions
+export type ActionId =
+  | keyof typeof HUNTER.actions
+  | keyof typeof CAMP.actions
+  | keyof typeof LS.actions
+  | keyof typeof BOW.actions
+  | keyof typeof VEL.actions
 export type SceneId = keyof typeof SCENES
 
-function withPalette(group: typeof HUNTER | typeof CAMP | typeof VEL): Record<string, Sprite> {
+function withPalette(group: typeof HUNTER | typeof CAMP | typeof LS | typeof BOW | typeof VEL): Record<string, Sprite> {
   const out: Record<string, Sprite> = {}
   for (const [id, action] of Object.entries(group.actions)) {
     out[id] = { palette: group.palette, anchorX: action.anchorX, frames: action.frames }
@@ -23,5 +30,11 @@ function withPalette(group: typeof HUNTER | typeof CAMP | typeof VEL): Record<st
   return out
 }
 
-export const ACTIONS = { ...withPalette(HUNTER), ...withPalette(CAMP), ...withPalette(VEL) } as Record<ActionId, Sprite>
+export const ACTIONS = {
+  ...withPalette(HUNTER),
+  ...withPalette(CAMP),
+  ...withPalette(LS),
+  ...withPalette(BOW),
+  ...withPalette(VEL),
+} as Record<ActionId, Sprite>
 export { SCENES }

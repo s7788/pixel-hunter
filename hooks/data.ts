@@ -1,3 +1,4 @@
+import type { HuntWeapon, HuntWeaponChoice } from '../types'
 import type { ActionId, SceneId } from './sprites'
 
 /**
@@ -18,6 +19,8 @@ export type Move = {
   stamina?: number
   /** Decision weight among the attacks of the same actor. */
   weight?: number
+  /** What the HUD calls out when the move starts (hunter attacks). */
+  label?: string
 }
 
 export const HUNTER = {
@@ -44,9 +47,17 @@ export const HUNTER = {
     roll: { action: 'C08', ticks: [2, 4, 4, 2], stamina: 1 },
     hit: { action: 'C15', ticks: [2, 3, 4, 3] },
     down: { action: 'C17', ticks: [8, 5, 4, 3] },
-    charge: { action: 'G03', ticks: [3, 6, 3, 4], active: 2, damage: 30, stamina: 2, weight: 50 },
-    trueCharge: { action: 'G05', ticks: [4, 3, 4, 4], active: 3, damage: 55, stamina: 3 },
-    tackle: { action: 'G06', ticks: [3, 3, 3, 3], active: 2, damage: 12, stamina: 1, weight: 30 },
+    charge: { action: 'G03', ticks: [3, 6, 3, 4], active: 2, damage: 30, stamina: 2, weight: 50, label: '蓄力斬' },
+    trueCharge: { action: 'G05', ticks: [4, 3, 4, 4], active: 3, damage: 55, stamina: 3, label: '真蓄力斬' },
+    tackle: { action: 'G06', ticks: [3, 3, 3, 3], active: 2, damage: 12, stamina: 1, weight: 30, label: '肩撞' },
+    // long sword: quick cuts; the spirit roundslash for openings
+    lsChain: { action: 'L02', ticks: [3, 3, 3, 3], active: 1, damage: 16, stamina: 1, weight: 50, label: '縱斬連段' },
+    lsFade: { action: 'L03', ticks: [3, 3, 4, 3], active: 1, damage: 12, stamina: 1, weight: 30, label: '袈裟斬' },
+    lsRound: { action: 'L05', ticks: [3, 4, 3, 5], active: 1, damage: 36, stamina: 3, label: '氣刃大迴旋斬' },
+    // bow: shots from range; the power shot for openings
+    bowShot: { action: 'B04', ticks: [3, 3, 3, 3], active: 2, damage: 10, stamina: 1, weight: 50, label: '通常射擊' },
+    bowQuick: { action: 'B05', ticks: [2, 2, 3, 2], active: 2, damage: 7, stamina: 1, weight: 30, label: '快速射擊' },
+    bowPower: { action: 'B06', ticks: [3, 4, 3, 4], active: 2, damage: 28, stamina: 3, label: '剛射' },
     // camp only: walk to the fire, kneel by it (C21 F1), eat the meat (C21 F4)
     walk: { action: 'C02', ticks: [3, 3, 3, 3] },
     roast: { action: 'C21', ticks: [1] },
@@ -57,6 +68,42 @@ export const HUNTER = {
 } as const
 
 export type HunterMove = keyof typeof HUNTER.moves
+
+type Weapon = {
+  label: string
+  /** The fight stance in place of C01 (which shows the great sword). */
+  idle?: Move
+  /** Picked by weight when a normal opening comes. */
+  attacks: readonly HunterMove[]
+  /** On a flinch or topple: the first one the stamina allows. */
+  openers: readonly HunterMove[]
+}
+
+/**
+ * The three weapons. Each one's damage is scaled by a fixed-seed run so that
+ * every weapon takes about `targetMinutes` (engine.ts `damageScale`).
+ */
+export const WEAPONS: Readonly<Record<HuntWeapon, Weapon>> = {
+  greatsword: { label: '大劍', attacks: ['charge', 'tackle'], openers: ['trueCharge', 'charge', 'tackle'] },
+  longsword: {
+    label: '太刀',
+    idle: { action: 'L01', ticks: [6, 6] },
+    attacks: ['lsChain', 'lsFade'],
+    openers: ['lsRound', 'lsChain', 'lsFade'],
+  },
+  bow: {
+    label: '弓',
+    idle: { action: 'B01', ticks: [6, 0, 0, 6] },
+    attacks: ['bowShot', 'bowQuick'],
+    openers: ['bowPower', 'bowShot', 'bowQuick'],
+  },
+}
+
+/** The camp's buttons, in order. */
+export const WEAPON_CHOICES: readonly { id: HuntWeaponChoice; label: string }[] = [
+  ...(Object.keys(WEAPONS) as HuntWeapon[]).map(id => ({ id, label: WEAPONS[id].label })),
+  { id: 'random', label: '隨機' },
+]
 
 export const VELKHANA = {
   name: '冰呪龍',
