@@ -1,16 +1,19 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { HuntEvent, HuntLang, HuntPhase, HuntWeaponChoice, HuntWorld } from '../types'
-import { TICK_MS, WEAPON_CHOICES } from './data'
+import type { HuntEvent, HuntLang, HuntPhase, HuntWeaponChoice, HuntWorld, MonsterId } from '../types'
+import { HUNTER, TICK_MS, WEAPON_CHOICES } from './data'
 import type { Game } from './engine'
-import { beginTurn, chooseWeapon, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, chooseWeapon, debugHunt, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { pickLang, t } from './i18n'
-import { HUNT_SIZE, huntSvg } from './svg'
+import { enabledMonsters } from './monsters/registry'
+import { huntCells, imageCells, huntRgba, RASTER, toBase64 } from './raster'
+import { HUNT_SIZE, huntSvg, hudText, statsSvg, statsText } from './svg'
 
 const PANE = 'hunt-8bit'
 const TITLE = 'Hunt'
 const SAVE_KEY = 'save'
+const PICTURE_KEY = 'terminalPicture'
 /** Ticks between saves while the game moves (10 s). */
 const SAVE_EVERY = 80
 
@@ -20,6 +23,8 @@ const lastElapsedMs = atom({ plugin: 'hunt-8bit', key: 'lastElapsedMs' } as cons
 const world = atom({ plugin: 'hunt-8bit', key: 'world' } as const, null as HuntWorld | null)
 const log = atom({ plugin: 'hunt-8bit', key: 'log' } as const, [] as HuntEvent[])
 const lang = atom({ plugin: 'hunt-8bit', key: 'lang' } as const, 'en' as HuntLang)
+/** How the terminal draws the scene: terminal cells (works anywhere) or an Image (kitty, Ghostty, iTerm2, WezTerm, foot). */
+const terminalCells = atom({ plugin: 'hunt-8bit', key: 'terminalCells' } as const, true)
 
 /** working_elapsed: MM:SS, HH:MM:SS past an hour. */
 const fmt = (ms: number): string => {
@@ -94,11 +99,18 @@ async function pickWeapon($: EngineInterface, choice: HuntWeaponChoice): Promise
   await note($, `weapon ${choice}`)
 }
 
-async function startTurn($: EngineInterface, label: string): Promise<void> {
+async function togglePicture($: EngineInterface): Promise<void> {
+  const next = !(await read($, terminalCells))
+  await update($, terminalCells, () => next)
+  await $.store.set(PICTURE_KEY, next)
+}
+
+/** A turn (or the demo) starts; `monster` drops the hunt under way for a fresh one of that species (debug). */
+async function startTurn($: EngineInterface, label: string, monster?: MonsterId): Promise<void> {
   const now = await $.clock.now()
   await update($, turnStartedAt, () => now)
   await update($, phase, () => 'hunting')
-  await save($, await changeGame($, beginTurn))
+  await save($, await changeGame($, g => (monster === undefined ? beginTurn(g) : debugHunt(g, monster))))
   await note($, label)
 }
 
@@ -118,7 +130,7 @@ export const register: Register = on => {
   let animation: Timer | undefined
   /**
    * Ticks, turn changes and the demo run one at a time, in arrival order, so a
-   * tick queued before a retreat or pause can never land a hit after it.
+   * tick queued before a retreat can never land a hit after it.
    */
   let queue: Promise<void> = Promise.resolve()
   const serial = (work: () => Promise<void>): Promise<void> => {
@@ -129,12 +141,18 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'hunt', description: 'Open the 8-bit hunt pane' })
-    await $.command.register({ name: 'hunt-demo', description: 'Toggle the hunt on or off without a Claude turn (debug)' })
+    await $.command.register({
+      name: 'hunt-demo',
+      description: 'Toggle the hunt on or off without a Claude turn; with a monster id, start a fresh hunt of it (debug)',
+      argumentHint: '[monster id]',
+    })
     const stored = (await $.store.get(SAVE_KEY)) as Game | undefined
     const language = await detectLang($)
     await update($, lang, () => language)
+    const cellsMode = await $.store.get(PICTURE_KEY)
+    if (typeof cellsMode === 'boolean') await update($, terminalCells, () => cellsMode)
     const now = await $.clock.now()
-    // a hot reload keeps the session's world (migrated if it predates collision); a new session restores the save
+    // a hot reload keeps the session's world (migrated if it is older); a new session restores the save
     await update($, world, w =>
       w !== null ? { ...w, game: migrate(w.game) } : { tick: 0, now, game: stored === undefined ? newGame(now) : restore(stored) },
     )
@@ -157,7 +175,15 @@ export const register: Register = on => {
     return { text: 'Hunt pane opened.' }
   })
 
-  on('command.run', { command: 'hunt-demo' }, async $ => {
+  on('command.run', { command: 'hunt-demo' }, async ($, e) => {
+    const wanted = e.args.trim()
+    if (wanted !== '') {
+      const monster = enabledMonsters().find(id => id === wanted)
+      if (monster === undefined) return { text: `Unknown monster "${wanted}". One of: ${enabledMonsters().join(', ')}.` }
+      await serial(() => startTurn($, `hunt-demo -> ${monster}`, monster))
+      await $.ui.open({ id: PANE, title: TITLE })
+      return { text: `Hunt demo: a fresh ${monster} hunt (the one under way was dropped).` }
+    }
     const isHunting = (await read($, phase)) === 'hunting'
     await serial(() => (isHunting ? finishTurn($, 'answer') : startTurn($, 'hunt-demo -> hunting')))
     await $.ui.open({ id: PANE, title: TITLE })
@@ -172,6 +198,7 @@ export const register: Register = on => {
   on('ui.press', { plugin: 'hunt-8bit' }, async ($, e, next) => {
     const weapon = WEAPON_CHOICES.find(c => `weapon-${c}` === e.element)
     if (weapon !== undefined) await serial(() => pickWeapon($, weapon))
+    else if (e.element === 'picture') await togglePicture($)
     else return next(e)
     return { element: e.element }
   })
@@ -192,6 +219,9 @@ export const register: Register = on => {
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
     const Svg = e.surface !== 'terminal' && 'Svg' in els ? els.Svg : undefined
+    const Image = e.surface === 'terminal' && 'Image' in els ? els.Image : undefined
+    const Raster = e.surface === 'terminal' && 'Raster' in els ? els.Raster : undefined
+    const isCells = await read($, terminalCells)
     const p = await read($, phase)
     const started = await read($, turnStartedAt)
     const w = await read($, world)
@@ -200,8 +230,13 @@ export const register: Register = on => {
     if (w === null) return <Text dimColor>Hunt is loading…</Text>
     const elapsed = started === null ? last : Math.max(0, w.now - started)
     const view = viewOf(w.game)
-    const source = huntSvg(p, view, fmt(elapsed), false, lg)
+    // the terminal's picture is pixels (raster.ts), the Desktop's an Svg
+    const picture = Svg === undefined && (Image !== undefined || Raster !== undefined)
+    const source = picture ? '' : huntSvg(p, view, fmt(elapsed), false, lg)
     const g = w.game
+    const clock = fmt(elapsed)
+    // the picture's box: the pane's width, no taller than the rows it leaves for the picture
+    const box = imageCells(e.props.bodyColumns, e.props.scroll.bodyRows)
     // pickable as soon as the turn ends, whether or not the hunter is back yet (engine.ts chooseWeapon)
     const canChoose = p !== 'hunting'
 
@@ -209,8 +244,36 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {Svg !== undefined ? (
           <Svg source={source} alt={`8-bit hunt: ${p}`} width={HUNT_SIZE.width} height={HUNT_SIZE.height} />
+        ) : Image !== undefined || Raster !== undefined ? (
+          <Box flexDirection="column">
+            {isCells && Raster !== undefined ? (
+              <Raster key="scene-cells" {...box} cells={huntCells(view, false, box.columns, box.rows)} />
+            ) : Image !== undefined ? (
+              <Image
+                key="scene"
+                source={{ rgba: toBase64(huntRgba(view, false)), width: RASTER.width, height: RASTER.height }}
+                {...box}
+                alt={`8-bit hunt: ${p}${view.monsterInfo === null ? '' : ` — ${t(lg, view.monsterInfo.name)}`}`}
+              />
+            ) : null}
+            <Text bold>{hudText(p, view, clock, lg)}</Text>
+            <Text dimColor>
+              HP {view.hp}/{HUNTER.hpMax} ST {view.stamina}/{HUNTER.staminaMax}
+            </Text>
+            {view.label !== '' && <Text>{t(lg, view.label)}</Text>}
+            {Image !== undefined && Raster !== undefined && (
+              <Button key="picture" plain onPress={() => togglePicture($)}>
+                {t(lg, isCells ? 'pictureCells' : 'pictureImage')}
+              </Button>
+            )}
+          </Box>
         ) : (
           <Text dimColor>(this surface draws no Svg; hunt scene skipped)</Text>
+        )}
+        {Svg !== undefined ? (
+          <Svg source={statsSvg(g, lg)} alt={statsText(g, lg)} width={HUNT_SIZE.width} height={24} />
+        ) : (
+          <Text>{statsText(g, lg)}</Text>
         )}
         {canChoose ? (
           <Box flexDirection="row">

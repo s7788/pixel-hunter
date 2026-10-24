@@ -8,7 +8,7 @@
     {
       "name": "hunt-8bit",
       "source": "./",
-      "description": "An 8-bit hunter in a side pane that fights a monster while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network."
+      "description": "An 8-bit hunter in a side pane that hunts one of nine monsters while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network."
     }
   ]
 }

@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { HuntAttack, HuntWeapon } from '../types'
-import { CAMP, HUNTER, TICK_MS, VELKHANA, WEAPONS } from './data'
+import { CAMP, HUNTER, TICK_MS, WEAPONS } from './data'
+import { enabledMonsters, monsterDef, VELKHANA } from './monsters/registry'
 import type { Game } from './engine'
 import { beginTurn, chooseWeapon, damageScale, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
@@ -11,7 +12,7 @@ const armed = (seed: number, weapon: HuntWeapon = 'greatsword'): Game => chooseW
 
 /** A fight with both sides parked: nobody decides anything for a long while. */
 function parked(seed = 1, weapon: HuntWeapon = 'greatsword'): Game {
-  let g = beginTurn(armed(seed, weapon))
+  let g = beginTurn(armed(seed, weapon), 'velkhana')
   while (g.mode !== 'fight') g = step(g, true)
   g.hunter = { ...g.hunter, move: 'idle', t: 0, x: HUNTER.x, wait: 999, rollIn: -1, intent: null, attack: null, facing: 1 }
   g.monster = { ...g.monster, move: 'idle', t: 0, x: VELKHANA.minX + 38, wait: 999, attack: null }
@@ -148,11 +149,12 @@ test('C25/C26: a saved attack that already hit does not hit again after a reload
 })
 
 test('C27/C28: an old save migrates to camp, HP kept, nothing under way', () => {
-  const g = run(beginTurn(newGame(4)), 300)
+  const g = run(beginTurn(newGame(4), 'velkhana'), 300)
   const old = JSON.parse(JSON.stringify(g)) as Record<string, unknown>
   for (const key of ['saveSchemaVersion', 'simTick', 'nextAttackSerial', 'lastOutcome', 'hits']) delete old[key]
   const back = migrate(old as unknown as Game)
-  expect(back.saveSchemaVersion).toBe(3)
+  expect(back.saveSchemaVersion).toBe(5)
+  expect(back.hunt?.monsterId).toBe('velkhana')
   expect(back.mode).toBe('camp')
   expect(back.hunt?.monsterHp).toBe(g.hunt?.monsterHp)
   expect(back.hunter.attack).toBeNull()
@@ -161,7 +163,7 @@ test('C27/C28: an old save migrates to camp, HP kept, nothing under way', () => 
 })
 
 test('C29/C30: travel, retreat and camp never deal damage', () => {
-  let g = beginTurn(newGame(6))
+  let g = beginTurn(newGame(6), 'velkhana')
   for (let i = 0; i < 20; i += 1) {
     g = step(g, true)
     if (g.mode === 'fight') break
@@ -178,7 +180,7 @@ test('C29/C30: travel, retreat and camp never deal damage', () => {
 
 test('C31/C35: the same seed replays the same hits; drawing boxes changes nothing', () => {
   const play = (draw: boolean): Game => {
-    let g = beginTurn(newGame(21))
+    let g = beginTurn(newGame(21), 'velkhana')
     for (let i = 0; i < 1500; i += 1) {
       g = step(g, true)
       if (draw) huntSvg('hunting', viewOf(g), '00:00', true)
@@ -201,7 +203,7 @@ for (const weapon of Object.keys(WEAPONS) as HuntWeapon[]) {
   test(`C36: from the usual stances the hunter (${weapon}) runs in and lands all three swings`, { timeoutMs: 60000 }, () => {
     const landed = new Set<string>()
     for (let seed = 1; seed <= 6 && landed.size < 3; seed += 1) {
-      let g = beginTurn(armed(seed, weapon))
+      let g = beginTurn(armed(seed, weapon), 'velkhana')
       for (let i = 0; i < 4000; i += 1) {
         const move = g.hunter.move
         g = step(g, true)
@@ -219,7 +221,7 @@ for (const weapon of Object.keys(WEAPONS) as HuntWeapon[]) {
     const tally = { swings: 0, landed: 0, monsterAttacks: 0, hunterHit: 0, evaded: 0, rolls: 0 }
     const ms: number[] = []
     for (let seed = 1; seed <= 40; seed += 1) {
-      let g = beginTurn(armed(seed * 7919, weapon))
+      let g = beginTurn(armed(seed * 7919, weapon), 'velkhana')
       let t = 0
       while (g.slain === 0 && t < 40000) {
         const prev = g
@@ -333,7 +335,7 @@ test('a weapon picked in camp is in hand at once; the fight draws its own stance
 })
 
 test('a pick made out of camp waits for the next trip out, and never changes the fight', () => {
-  let g = run(beginTurn(armed(5, 'greatsword')), 200)
+  let g = run(beginTurn(armed(5, 'greatsword'), 'velkhana'), 200)
   expect(g.mode).toBe('fight')
   g = chooseWeapon(g, 'longsword')
   expect(g.weapon).toBe('greatsword')
@@ -355,7 +357,7 @@ test('random draws a weapon for each new hunt and keeps it for a hunt carried ov
   const drawn = new Set<HuntWeapon>()
   let g = chooseWeapon(newGame(8), 'random')
   for (let i = 0; i < 12; i += 1) {
-    g = beginTurn(g)
+    g = beginTurn(g, 'velkhana')
     const weapon = g.weapon
     drawn.add(weapon)
     // carried over to the next turn: the same weapon
@@ -372,21 +374,49 @@ test('random draws a weapon for each new hunt and keeps it for a hunt carried ov
 })
 
 test('every weapon is scaled to the great sword pace; the great sword is unscaled', () => {
-  expect(damageScale('greatsword')).toBe(1)
+  expect(damageScale('greatsword', 'velkhana')).toBe(1)
   for (const weapon of ['longsword', 'bow'] as const) {
-    expect(damageScale(weapon)).toBeGreaterThan(0.2)
-    expect(damageScale(weapon)).toBeLessThan(5)
+    expect(damageScale(weapon, 'velkhana')).toBeGreaterThan(0.2)
+    expect(damageScale(weapon, 'velkhana')).toBeLessThan(5)
   }
 })
 
+test('every species with every weapon hunts near its target minutes; stats printed', { timeoutMs: 600000 }, () => {
+  const out = (globalThis as unknown as { console: { log(text: string): void } }).console
+  const rows: string[] = []
+  for (const id of enabledMonsters()) {
+    const target = monsterDef(id)!.targetMinutes
+    for (const weapon of Object.keys(WEAPONS) as HuntWeapon[]) {
+      const minutes: number[] = []
+      let carted = 0
+      for (let seed = 1; seed <= 12; seed += 1) {
+        let g = beginTurn(armed(seed * 104729, weapon), id)
+        let t = 0
+        while (g.slain === 0 && t < 40000) {
+          g = step(g, true)
+          t += 1
+        }
+        minutes.push((t * TICK_MS) / 60000)
+        if (g.carts > 0) carted += 1
+      }
+      const avg = minutes.reduce((a, b) => a + b, 0) / minutes.length
+      rows.push(`${id}/${weapon} ${avg.toFixed(2)}min (target ${target}) carts ${Math.round((carted / 12) * 100)}%`)
+      // 12 hunts are noisy: within a third of the species' target
+      expect(avg).toBeGreaterThan(target * 0.67)
+      expect(avg).toBeLessThan(target * 1.33)
+    }
+  }
+  out.log(rows.join('\n'))
+})
+
 test('a save from before weapons (schema 2) gets the great sword and plays on', () => {
-  const g = run(beginTurn(newGame(4)), 300)
+  const g = run(beginTurn(newGame(4), 'velkhana'), 300)
   const old = JSON.parse(JSON.stringify(g)) as Record<string, unknown>
   old.saveSchemaVersion = 2
   delete old.weapon
   delete old.weaponChoice
   const back = migrate(old as unknown as Game)
-  expect(back.saveSchemaVersion).toBe(3)
+  expect(back.saveSchemaVersion).toBe(5)
   expect(back.weapon).toBe('greatsword')
   expect(back.weaponChoice).toBe('greatsword')
   expect(back.mode).toBe(g.mode)
@@ -394,7 +424,7 @@ test('a save from before weapons (schema 2) gets the great sword and plays on', 
 })
 
 test('a turn begun during the slain hold sets out on a new hunt once the hold is over', () => {
-  let g = beginTurn(newGame(5))
+  let g = beginTurn(newGame(5), 'velkhana')
   while (g.mode !== 'fight') g = step(g, true)
   g.hunt!.monsterHp = 1
   while (g.mode !== 'slain') g = step(g, true)
@@ -406,7 +436,7 @@ test('a turn begun during the slain hold sets out on a new hunt once the hold is
 })
 
 test('a hunt saved before it was ever fought still has its monster walk in after a restore', () => {
-  let g = beginTurn(newGame(6))
+  let g = beginTurn(newGame(6), 'velkhana')
   while (g.mode !== 'arriving') g = step(g, true)
   g = run(g, 4)
   g = rest(endTurn(g), 30)
@@ -418,7 +448,7 @@ test('a hunt saved before it was ever fought still has its monster walk in after
 
 test('the monster is never toppled again while it is down or getting up', () => {
   for (let seed = 1; seed <= 6; seed += 1) {
-    let g = beginTurn(newGame(seed))
+    let g = beginTurn(newGame(seed), 'velkhana')
     for (let i = 0; i < 12000; i += 1) {
       const before = g.monster.move
       g = step(g, true)

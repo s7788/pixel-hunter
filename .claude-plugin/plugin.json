@@ -1,7 +1,7 @@
 {
   "name": "hunt-8bit",
-  "version": "0.5.0",
-  "description": "An 8-bit hunter in a side pane that fights a monster while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network.",
+  "version": "0.10.0",
+  "description": "An 8-bit hunter in a side pane that hunts one of nine monsters while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network.",
   "author": {
     "name": "s7788"
   },
@@ -14,7 +14,8 @@
     "pane",
     "companion",
     "idle",
-    "fun"
+    "fun",
+    "monster-hunt"
   ],
   "types": "./types/index.d.ts"
 }

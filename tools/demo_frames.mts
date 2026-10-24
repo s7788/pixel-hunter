@@ -1,6 +1,6 @@
 /**
  * Writes the frames of the README's demo: the camp, then a short fight with
- * each weapon, then the run home. Each frame is the pane's own SVG (huntSvg),
+ * each weapon against a different monster, then the run home. Each frame is the pane's own SVG (huntSvg),
  * so the demo is the game as drawn, not a mock-up.
  *
  * Usage: npx -y tsx tools/demo_frames.mts <out dir> [en | zh-TW]   (then tools/svg_to_gif.py)
@@ -8,10 +8,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { HuntLang, HuntPhase, HuntWeapon } from '../types'
+import type { HuntLang, HuntPhase, HuntWeapon, MonsterId } from '../types'
 import { TICK_MS } from '../hooks/data'
 import type { Game } from '../hooks/engine'
-import { beginTurn, chooseWeapon, endTurn, newGame, step, viewOf } from '../hooks/engine'
+import { chooseWeapon, debugHunt, endTurn, newGame, step, viewOf } from '../hooks/engine'
 import { huntSvg } from '../hooks/svg'
 
 const out = process.argv[2] ?? 'demo-frames'
@@ -37,9 +37,14 @@ for (let i = 0; i < 20; i += 1) {
   frame('camp', g)
 }
 
-const weapons: HuntWeapon[] = ['greatsword', 'longsword', 'bow']
-weapons.forEach((weapon, w) => {
-  g = beginTurn(chooseWeapon(g, weapon))
+const fights: [HuntWeapon, MonsterId][] = [
+  ['greatsword', 'tigrex'],
+  ['longsword', 'zinogre'],
+  ['bow', 'velkhana'],
+]
+fights.forEach(([weapon, monster], w) => {
+  // a fresh hunt of this species each time, the weapon picked at camp first
+  g = debugHunt(chooseWeapon(g, weapon), monster)
   // the first trip runs out of camp and the monster walks in; later ones cut to the fight
   while (g.mode !== 'fight') {
     g = step(g, true)
@@ -63,7 +68,7 @@ weapons.forEach((weapon, w) => {
   g = endTurn(g)
   while (g.mode !== 'camp') {
     g = step(g, false)
-    if (w === weapons.length - 1) frame('retreat', g)
+    if (w === fights.length - 1) frame('retreat', g)
   }
 })
 for (let i = 0; i < 12; i += 1) {

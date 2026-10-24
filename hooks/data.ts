@@ -19,6 +19,11 @@ export type Move = {
   stamina?: number
   /** Decision weight among the attacks of the same actor. */
   weight?: number
+  /**
+   * The action whose boxes it is hit on, when not the one drawn: a weapon's run
+   * is drawn as its stepping stance but hit as C03, the body the moves are tuned to.
+   */
+  body?: ActionId
 }
 
 export const HUNTER = {
@@ -90,7 +95,7 @@ export const WEAPONS: Readonly<Record<HuntWeapon, Weapon>> = {
   longsword: {
     moves: {
       idle: { action: 'L01', ticks: [6, 6] },
-      run: { action: 'L01', ticks: [2, 2] },
+      run: { action: 'L01', ticks: [2, 2], body: 'C03' },
       walk: { action: 'L01', ticks: [3, 3] },
       // L06 F1, F2 held, F4: the foresight slide back, without its counter cut
       roll: { action: 'L06', ticks: [2, 4, 4, 2], stamina: 1 },
@@ -102,7 +107,7 @@ export const WEAPONS: Readonly<Record<HuntWeapon, Weapon>> = {
   bow: {
     moves: {
       idle: { action: 'B01', ticks: [6, 0, 0, 6] },
-      run: { action: 'B01', ticks: [2, 2, 2, 2] },
+      run: { action: 'B01', ticks: [2, 2, 2, 2], body: 'C03' },
       walk: { action: 'B01', ticks: [3, 3, 3, 3] },
       roll: { action: 'B07', ticks: [2, 4, 4, 2], stamina: 1 },
     },
@@ -115,32 +120,7 @@ export const WEAPONS: Readonly<Record<HuntWeapon, Weapon>> = {
 /** The camp's buttons, in order; each id is also its text id (hooks/i18n.ts). */
 export const WEAPON_CHOICES: readonly HuntWeaponChoice[] = [...(Object.keys(WEAPONS) as HuntWeapon[]), 'random']
 
-export const VELKHANA = {
-  /** Minutes of Claude's work one hunt is tuned to last; damage scales to it. */
-  targetMinutes: 5,
-  /** New hunts alternate between these grounds; a hunt never changes ground. */
-  scenes: ['S02', 'S04'] as const satisfies readonly SceneId[],
-  x: 262,
-  /** Leftmost the monster walks in to reach the hunter. */
-  minX: 200,
-  enterFromX: 440,
-  walkStep: 12,
-  idleTicks: [16, 40] as const,
-  /** Damage taken between flinches, and between topples. */
-  flinchEvery: 70,
-  toppleEvery: 200,
-  moves: {
-    idle: { action: 'V01', ticks: [3, 3, 3, 3] },
-    walk: { action: 'V02', ticks: [3, 3, 3, 3], weight: 15 },
-    tailStab: { action: 'V14', ticks: [5, 3, 3, 3], active: 2, damage: 2, weight: 50 },
-    iceBeam: { action: 'V17', ticks: [3, 4, 6, 3], active: 2, damage: 2, weight: 35 },
-    flinch: { action: 'V23', ticks: [3, 3, 3, 3] },
-    topple: { action: 'V25', ticks: [3, 3, 3, 40] },
-    getup: { action: 'V26', ticks: [3, 4, 4, 3] },
-  } satisfies Record<string, Move>,
-} as const
-
-export type MonsterMove = keyof typeof VELKHANA.moves
+/** The monsters' tuning lives with each species in hooks/monsters. */
 
 /** The two bodies never overlap: the gap kept between their body boxes. */
 export const BODY_GAP = 2
