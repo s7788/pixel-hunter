@@ -75,6 +75,10 @@ claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
 
 hunt-8bit 是非官方的同人專案，靈感來自魔物獵人系列，與 Capcom 無關，也未經其認可。像素圖是本專案自己的 8-bit 改編，不是從任何遊戲取出的素材。
 
+## 授權
+
+程式碼採用 [MIT 授權](LICENSE)。授權範圍不包含像素美術（`hooks/gen` 裡的角色與場景、`docs/media` 裡的圖片），也不包含魔物與招式的名稱：它們來自魔物獵人系列，不開放再利用。Monster Hunter 是 Capcom 的商標。
+
 ## 參與開發
 
 架構、素材管線與已知限制見 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)；設計決策與檔案地圖見 [HANDOFF.md](HANDOFF.md)。檢查指令：

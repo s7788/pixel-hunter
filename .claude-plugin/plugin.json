@@ -7,6 +7,7 @@
   },
   "homepage": "https://github.com/s7788/pixel-hunter",
   "repository": "https://github.com/s7788/pixel-hunter",
+  "license": "MIT",
   "keywords": [
     "game",
     "pixel-art",

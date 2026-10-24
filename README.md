@@ -75,6 +75,10 @@ The game speaks your language: Traditional Chinese where Claude does, English ev
 
 hunt-8bit is an unofficial fan project, inspired by Monster Hunter. It is not affiliated with or endorsed by Capcom. The pixel art is this project's own 8-bit adaptation, not assets taken from any game.
 
+## License
+
+The source code is under the [MIT License](LICENSE). The license does not cover the pixel art (the sprites and scenes in `hooks/gen` and the images in `docs/media`) or the names of the monsters and their moves, which come from the Monster Hunter series; those are not offered for reuse. Monster Hunter is a trademark of Capcom.
+
 ## Contributing
 
 How it's built, the sprite pipeline and the known limits: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Design decisions and the file map: [HANDOFF.md](HANDOFF.md). Checks:
