@@ -178,22 +178,23 @@ test('M03: the breath goes straight ahead only, lands once from its three boxes,
   expect(g.hunter.hp).toBeGreaterThanOrEqual(hp)
 })
 
-test('AN02: the charge runs up to the hunter and stops at the body, never through it', () => {
+test('AN02: the charge runs at the hunter, never through it, and stops short of pinning it to the edge', () => {
   let g = parked()
-  // backed against the left edge, no stamina to roll: the charge must stop at the body
+  // backed against the left edge, no stamina to roll: the charge stops with the hunter's room left free
   g.hunter.stamina = 0
   g.hunter.x = HUNTER.minX
-  // close enough that the active window (ticks 9..14) still meets the hunter once it stops
-  g.monster = { ...g.monster, move: 'charge', t: 0, x: 200, attack: { id: 't:monster:1', contacts: [] } }
+  g.monster = { ...g.monster, move: 'charge', t: 0, x: 330, attack: { id: 't:monster:1', contacts: [] } }
+  const start = g.monster.x
   for (let i = 0; i < 27; i += 1) {
     g = step(g, true)
     expect(g.hunter.x + 22).toBeLessThanOrEqual(g.monster.x + ANJANATH.bounds[0])
   }
-  const stop = HUNTER.minX + 22 - ANJANATH.bounds[0] + 2
+  const stop = HUNTER.minX + HUNTER.backRoom + 22 - ANJANATH.bounds[0] + 2
+  expect(start - g.monster.x).toBeGreaterThan(60)
   expect(g.monster.x).toBe(stop)
-  // stopped there, its box still meets a hunter standing at the body (one who runs off shrinks out of it)
+  // a hunter standing in its way, a little further in, is still caught by the charge's box at the stop
   const hit = hitboxes('AN02', 2, { x: stop, groundY: 171, renderFlip: 1 })
-  expect(contactPart(hit, hurtboxes('C01', 0, { x: HUNTER.minX, groundY: 171, renderFlip: 1 }))).toBeDefined()
+  expect(contactPart(hit, hurtboxes('C01', 0, { x: stop + ANJANATH.bounds[0] - 24, groundY: 171, renderFlip: 1 }))).toBeDefined()
 })
 
 test('a fire-ready hunt keeps its state across a new session', () => {

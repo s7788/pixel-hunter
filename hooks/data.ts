@@ -35,10 +35,15 @@ export const HUNTER = {
   /** Where the hunter enters a fight; from there it runs in and rolls back as needed. */
   x: 96,
   campX: 208,
-  /** Fight moves: run speed, roll distance (backwards), leftmost stance. */
+  /** Fight moves: run speed, roll distance (backwards), leftmost stance (far enough in that the body stays on screen). */
   runStep: 4,
   rollDistance: 30,
-  minX: 16,
+  minX: 32,
+  /**
+   * Room the monster always leaves behind the hunter, from the left edge: it never
+   * walks, lunges or dives so close that the hunter has no space to back off or roll.
+   */
+  backRoom: 90,
   /** Chance to roll when a monster attack is predicted to reach; drawn once per attack. */
   dodgeRate: 0.4,
   idleTicks: [4, 10] as const,

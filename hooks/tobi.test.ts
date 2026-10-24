@@ -168,9 +168,10 @@ test('TK02: the pounce leaps 28 px and lands 80 px on; drawing and boxes follow 
   expect(heights[12]).toBe(0)
   expect(heights[22]).toBe(0)
   let g = parked()
-  g.hunter.x = 20
+  g.hunter.x = HUNTER.minX
   g.hunter.stamina = 0
-  g.monster = { ...g.monster, move: 'pounce', t: 0, attack: { id: 't:monster:0', contacts: [] } }
+  // from far enough right that the 80 px land well short of the room it must leave the hunter
+  g.monster = { ...g.monster, move: 'pounce', t: 0, x: 310, attack: { id: 't:monster:0', contacts: [] } }
   const startX = g.monster.x
   let airborne = false
   for (let i = 0; i < 9; i += 1) {

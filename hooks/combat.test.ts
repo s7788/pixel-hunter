@@ -4,7 +4,7 @@ import type { HuntAttack, HuntWeapon } from '../types'
 import { CAMP, HUNTER, TICK_MS, WEAPONS } from './data'
 import { enabledMonsters, monsterDef, VELKHANA } from './monsters/registry'
 import type { Game } from './engine'
-import { beginTurn, chooseWeapon, damageScale, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { beginTurn, chooseWeapon, damageScale, endTurn, hunterRoom, migrate, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
 
 /** A new game holding this weapon from the first trip out. */
@@ -455,4 +455,53 @@ test('the monster is never toppled again while it is down or getting up', () => 
       if (g.monster.move === 'topple' && g.monster.t === 0 && g.mode === 'fight') expect(['topple', 'getup']).not.toContain(before)
     }
   }
+})
+
+test('no monster pins the hunter to the left edge: it always leaves the hunter room to back off and roll', { timeoutMs: 300000 }, () => {
+  for (const id of enabledMonsters()) {
+    let fight = 0
+    let atWall = 0
+    for (const weapon of Object.keys(WEAPONS) as HuntWeapon[]) {
+      let g = beginTurn(armed(3301, weapon), id)
+      for (let t = 0; t < 3000 && g.slain === 0; t += 1) {
+        g = step(g, true)
+        if (g.mode !== 'fight') continue
+        fight += 1
+        // the room behind the hunter never closes, however the monster walks, lunges or dives
+        expect(hunterRoom(g)).toBeGreaterThanOrEqual(HUNTER.backRoom - 0.5)
+        if (g.hunter.x <= HUNTER.minX + 2) atWall += 1
+      }
+    }
+    // backing off can still reach the edge now and then, but it is no longer where the fight is held
+    expect(atWall / fight).toBeLessThan(0.4)
+  }
+})
+
+test('Random takes effect at once: a press in camp changes the weapon in hand, and no draw repeats the last', () => {
+  // a press in camp, like a fixed pick, puts a weapon in hand now, and never the same one
+  let g = chooseWeapon(newGame(5), 'longsword')
+  for (let i = 0; i < 20; i += 1) {
+    const before = g.weapon
+    g = chooseWeapon(g, 'random')
+    expect(g.weaponChoice).toBe('random')
+    expect(g.weapon).not.toBe(before)
+  }
+  // out on a hunt the press waits: the fight keeps its weapon
+  let out = run(beginTurn(armed(5, 'bow'), 'velkhana'), 200)
+  expect(out.mode).toBe('fight')
+  out = chooseWeapon(out, 'random')
+  expect(out.weapon).toBe('bow')
+  // every new hunt draws a weapon other than the last one's, and all three come up
+  let h = chooseWeapon(newGame(9), 'random')
+  const seen = new Set<string>()
+  for (let i = 0; i < 30; i += 1) {
+    const prev = h.weapon
+    h = beginTurn(h, 'great_jagras')
+    expect(h.weapon).not.toBe(prev)
+    seen.add(h.weapon)
+    h.hunt!.monsterHp = 0.5
+    for (let t = 0; t < 400 && h.hunt !== null; t += 1) h = step(h, true)
+    h.isResting = false
+  }
+  expect(seen.size).toBe(3)
 })

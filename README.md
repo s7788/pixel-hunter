@@ -37,7 +37,7 @@ The game speaks your language: Traditional Chinese where Claude does, English ev
 - **The fight runs itself.** The hunter reads the monster's moves: it dodges what would hit it, backs off, runs in, and only swings when the blow would land.
 - **Damage is real contact.** Every attack has hit boxes; a blow counts only when they touch the target's body.
 - **Progress is kept.** The monster's HP carries over between turns and sessions. Bring it down for a kill; run out of HP and the hunter is carted back to camp, with the monster still wounded. A strip under the picture counts your kills by monster.
-- **Pick your weapon at camp.** Under the picture, between turns: **Great Sword**, **Long Sword**, **Bow** or **Random** (a new draw for each new hunt). Each weapon has its own stance, run, dodge and moves, and they're balanced to hunt every monster at about the same pace.
+- **Pick your weapon at camp.** Under the picture, between turns: **Great Sword**, **Long Sword**, **Bow** or **Random** (a different weapon at once, and again for each new hunt). Each weapon has its own stance, run, dodge and moves, and they're balanced to hunt every monster at about the same pace.
 
 | | Moves | Character |
 |---|---|---|

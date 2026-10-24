@@ -287,26 +287,29 @@ export function damageScale(weapon: Weapon, id: MonsterId): number {
 /** Out on a hunt: the weapon in hand stays until the hunter is on the way home. */
 const isOut = (g: Game): boolean => g.mode === 'leaving' || g.mode === 'arriving' || g.mode === 'fight'
 
+/** A random weapon, never the one in hand: every draw changes what the hunter holds. */
+function drawWeapon(g: Game): Weapon {
+  const others = (Object.keys(WEAPONS) as Weapon[]).filter(w => w !== g.weapon)
+  return others[Math.floor(rand(g) * others.length)]!
+}
+
 /**
- * The weapon pick. A fixed weapon is taken up at once unless the hunter is out
- * (then on the way home, `toCamp`, or the next trip out); `random` waits for
- * the next trip out (`takeWeapon`).
+ * The weapon pick, taken up at once unless the hunter is out (then on the
+ * way home, `toCamp`, or the next trip out). `random` draws one now, like a
+ * fixed pick, and draws again for every new hunt (`takeWeapon`).
  */
 export function chooseWeapon(game: Game, choice: WeaponChoice): Game {
   const g = clone(game)
   g.weaponChoice = choice
-  if (!isOut(g) && choice !== 'random') g.weapon = choice
+  if (!isOut(g)) g.weapon = choice === 'random' ? drawWeapon(g) : choice
   return g
 }
 
-/** Leaving camp: put the pick in hand; `random` draws only for a new hunt. */
+/** Leaving camp: put the pick in hand; `random` draws again only for a new hunt. */
 function takeWeapon(g: Game, isNewHunt: boolean): void {
   const choice = g.weaponChoice
   if (choice !== 'random') g.weapon = choice
-  else if (isNewHunt) {
-    const all = Object.keys(WEAPONS) as Weapon[]
-    g.weapon = all[Math.floor(rand(g) * all.length)]!
-  }
+  else if (isNewHunt) g.weapon = drawWeapon(g)
 }
 
 /** The species of a new hunt: an enabled one, from the seed (the draw leaves the seed as it is). */
@@ -629,8 +632,18 @@ const monsterMaxX = (g: Game): number => ARENA_RIGHT - pushBox(g)[1]
 
 /** The bodies never overlap: the hunter stays left of the monster's push box. */
 const hunterMaxX = (g: Game): number => g.monster.x + pushBox(g)[0] - MOVE_BOUNDS.hunter[1] - BODY_GAP
+/** Room the hunter has between the left edge and the monster's push box (tests hold it to `backRoom`). */
+export const hunterRoom = (g: Game): number => hunterMaxX(g) - HUNTER.minX
+
+/** Leftmost root that still leaves the hunter `backRoom` to back off and roll in, for the push box now. */
+const roomFloor = (g: Game): number => HUNTER.minX + HUNTER.backRoom + MOVE_BOUNDS.hunter[1] - pushBox(g)[0] + BODY_GAP
+
+/**
+ * Leftmost the monster's root goes: its own limit, never into the hunter, and
+ * never so far that the hunter is pinned to the left edge (`backRoom` stays free).
+ */
 const monsterMinX = (g: Game): number =>
-  Math.max(defOf(g).minX, g.hunter.x + MOVE_BOUNDS.hunter[1] - pushBox(g)[0] + BODY_GAP)
+  Math.max(defOf(g).minX, g.hunter.x + MOVE_BOUNDS.hunter[1] - pushBox(g)[0] + BODY_GAP, roomFloor(g))
 
 /** Local pixels a projectile has flown forward by this tick of its move (forward = the art's facing). */
 function flight(g: Game, move: MonsterMoveDef, t: number): number {
@@ -844,6 +857,8 @@ function fight(g: Game): void {
     if (m.wait <= 0) monsterDecide(g)
   }
 
+  // a state that widens the monster (a swollen belly) moves it off the hunter's room, as a push would
+  if (m.x < roomFloor(g)) m.x = Math.min(monsterMaxX(g), roomFloor(g))
   // a lunge or a state that widens the monster pushes the hunter back, never through it
   if (h.x > hunterMaxX(g)) h.x = Math.max(HUNTER.minX, hunterMaxX(g))
 
@@ -1044,24 +1059,28 @@ function threat(g: Game, as: HunterMove): number | null {
 /**
  * The free hunter (idle or running) watches the monster. An attack that would
  * reach gets one dodge draw (per attack, the first time the hunter is free to
- * see it); a roll is timed to meet it, otherwise the hunter backs off. Returns
- * true when this tick went to dodging.
+ * see it); a roll is timed to meet it, otherwise the hunter backs off. Backed
+ * against the left edge there is nowhere left to run, so it rolls whenever it
+ * has the stamina. Returns true when this tick went to dodging.
  */
 function watch(g: Game): boolean {
   const h = g.hunter
   const coming = threat(g, 'idle')
   if (coming === null) return false
   const id = g.monster.attack!.id
+  const timeRoll = (): boolean => {
+    const safeFrom = sum(hunterMove(g, 'roll').ticks.slice(0, HUNTER.rollInvulnerable[0]))
+    h.rollIn = Math.max(0, coming - safeFrom - 3)
+    h.intent = null
+    if (h.move === 'run') hunterDo(g, 'idle')
+    return true
+  }
   if (h.dodgeFor !== id) {
     h.dodgeFor = id
-    if (can(g, 'roll') && rand(g) < HUNTER.dodgeRate) {
-      const safeFrom = sum(hunterMove(g, 'roll').ticks.slice(0, HUNTER.rollInvulnerable[0]))
-      h.rollIn = Math.max(0, coming - safeFrom - 3)
-      h.intent = null
-      if (h.move === 'run') hunterDo(g, 'idle')
-      return true
-    }
+    if (can(g, 'roll') && rand(g) < HUNTER.dodgeRate) return timeRoll()
   }
+  const isCornered = h.x - HUNTER.minX < HUNTER.runStep
+  if (isCornered && can(g, 'roll')) return timeRoll()
   backOff(g)
   return true
 }
