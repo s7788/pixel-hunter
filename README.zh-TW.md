@@ -73,11 +73,17 @@ claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
 
 ## 同人專案
 
-hunt-8bit 是非官方的同人專案，靈感來自魔物獵人系列，與 Capcom 無關，也未經其認可。像素圖是本專案自己的 8-bit 改編，不是從任何遊戲取出的素材。
+hunt-8bit 是基於魔物獵人系列的免費、非商業、非官方二次創作專案，與 Capcom 無關，未獲 Capcom 官方認可或個別授權。Monster Hunter 與原作角色設計的權利歸各自權利人所有。
+
+本專案以遵循 [Capcom 二次創作規範](https://www.capcom-games.com/ja-jp/fan-content-guidelines/) 為原則。該規範涵蓋加入創作性的遊戲，限制營利用途，且不涵蓋直接使用或加工官方素材、使用官方 Logo 等行為。此說明不代表 Capcom 已個別核准本專案或認證其符合規範。
+
+依儲存庫擷取工具的記錄，來源動作板為 AI 生成的關鍵姿勢圖片；角色影格由外部參考包裁切、去背、對齊及調色盤量化而來，結晶廢墟場景（S05）則由 `tools/make_s05.py` 程序生成。參考包與生成紀錄未隨儲存庫提供，因此僅憑本儲存庫無法驗證完整素材來源，也無法確認生成時是否使用官方或第三方圖片作為輸入。詳見 [NOTICE](NOTICE) 與[素材管線](docs/DEVELOPMENT.md#素材管線)。
 
 ## 授權
 
 程式碼採用 [MIT 授權](LICENSE)。授權範圍不包含像素美術（`hooks/gen` 裡的角色與場景、`docs/media` 裡的圖片），也不包含魔物與招式的名稱：它們來自魔物獵人系列，不開放再利用。Monster Hunter 是 Capcom 的商標。詳見 [NOTICE](NOTICE)。
+
+非商業同人專案的定位適用於涉及魔物獵人內容的作品，不會替 MIT 授權的程式碼新增非商業限制。MIT 不授予 Capcom 智慧財產或上述排除美術的使用權；涉及這些內容的再利用，須另依適用規範確認權利或取得授權。
 
 ## 參與開發
 

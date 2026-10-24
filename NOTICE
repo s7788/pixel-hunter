@@ -9,3 +9,39 @@ images in docs/media) or the names of the monsters and their moves, which come
 from the Monster Hunter series. They are not offered for reuse. Monster Hunter
 is a trademark of Capcom. This is an unofficial fan project, not affiliated
 with or endorsed by Capcom.
+
+Fan-project purpose and guidelines
+----------------------------------
+This is a free, non-commercial fan project based on Monster Hunter, not an
+official Capcom product. No individual approval or license from Capcom is
+claimed. Rights in the underlying Monster Hunter content remain with their
+respective rights holders.
+
+The project is intended to follow the Capcom Fan Content Guidelines:
+https://www.capcom-games.com/ja-jp/fan-content-guidelines/
+
+The guidelines include creatively adapted games, restrict commercial use,
+and exclude direct reuse or processing of official assets and use of official
+logos. Capcom reserves the right to request that use of its content stop.
+This notice does not certify compliance or grant permission on Capcom's behalf.
+
+Asset provenance
+----------------
+tools/extract_sprites.py describes the source action boards as AI-generated
+key-pose images. The tool crops, removes backgrounds, aligns and quantizes
+sprites from external reference packs. The S05 crystal-ruins scene is generated
+procedurally by tools/make_s05.py. The docs/media demonstrations depict the
+project's rendered game.
+
+The external reference packs and generation records are not included in this
+repository. Complete provenance, including whether official or third-party
+images were supplied as generation inputs, cannot be verified from this
+repository alone. AI generation is not, by itself, proof of permission or
+compliance with the guidelines.
+
+License boundary
+----------------
+The non-commercial fan-project purpose does not change the MIT License for
+the source code. MIT does not grant rights to Capcom's intellectual property
+or to the excluded artwork. Reuse involving that content requires its own
+rights assessment under applicable guidelines or separate permission.
