@@ -158,7 +158,6 @@ export const register: Register = on => {
     const started = await read($, turnStartedAt)
     const w = await read($, world)
     const last = await read($, lastElapsedMs)
-    const events = await read($, log)
     const isOpen = await read($, debugOpen)
     const isBoxes = await read($, boxesOpen)
     if (w === null) return <Text dimColor>Hunt is loading…</Text>
@@ -166,8 +165,8 @@ export const register: Register = on => {
     const view = viewOf(w.game)
     const source = huntSvg(p, view, fmt(elapsed), p === 'paused', isOpen && isBoxes)
     const g = w.game
-    // the weapon is picked in camp only; a fight, or a turn about to leave, locks it
-    const canChoose = g.mode === 'camp' && p !== 'hunting'
+    // pickable as soon as the turn ends, whether or not the hunter is back yet (engine.ts chooseWeapon)
+    const canChoose = p !== 'hunting'
 
     return (
       <Box flexDirection="column">
@@ -197,7 +196,7 @@ export const register: Register = on => {
         ) : (
           <Text dimColor>
             武器 {WEAPONS[g.weapon].label}
-            {g.weaponChoice === 'random' ? '（隨機）' : ''}・回營後才能換
+            {g.weaponChoice === 'random' ? '（隨機）' : ''}・回合結束後可換
           </Text>
         )}
         <Button
@@ -224,25 +223,6 @@ export const register: Register = on => {
             >
               {isBoxes ? '碰撞框 ■ 開' : '碰撞框 □ 關'}
             </Button>
-            <Text dimColor>
-              phase {p} / mode {g.mode} / {g.weapon} / hunter {g.hunter.move} / monster {view.monster === null ? '-' : g.monster.move}
-            </Text>
-            <Text dimColor>
-              HP {g.hunter.hp} ST {g.hunter.stamina} / monster HP {view.monsterHpPercent ?? '-'}% / hunt #{g.huntNo} / slain{' '}
-              {g.slain} / carts {g.carts}
-            </Text>
-            <Text dimColor>
-              svg {source.length} / 131072 chars / {e.surface} {e.props.placement} cols {e.props.bodyColumns}
-            </Text>
-            {events.slice(-6).map(ev => (
-              <Text dimColor>{ev.text}</Text>
-            ))}
-            {isBoxes &&
-              g.hits.slice(-6).map(hit => (
-                <Text dimColor>
-                  #{hit.tick} {hit.attackId} → {hit.target}/{hit.part} {hit.outcome} {hit.damage}
-                </Text>
-              ))}
           </Box>
         )}
       </Box>

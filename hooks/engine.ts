@@ -190,14 +190,18 @@ export function damageScale(weapon: Weapon): number {
   return scale
 }
 
+/** Out on a hunt: the weapon in hand stays until the hunter is on the way home. */
+const isOut = (g: Game): boolean => g.mode === 'leaving' || g.mode === 'arriving' || g.mode === 'fight'
+
 /**
- * The camp's weapon pick. A fixed weapon is taken up at once in camp; out of
- * camp it waits for the next trip out (`takeWeapon`), as `random` always does.
+ * The weapon pick. A fixed weapon is taken up at once unless the hunter is out
+ * (then on the way home, `toCamp`, or the next trip out); `random` waits for
+ * the next trip out (`takeWeapon`).
  */
 export function chooseWeapon(game: Game, choice: WeaponChoice): Game {
   const g = clone(game)
   g.weaponChoice = choice
-  if (g.mode === 'camp' && choice !== 'random') g.weapon = choice
+  if (!isOut(g) && choice !== 'random') g.weapon = choice
   return g
 }
 
@@ -329,6 +333,7 @@ function campRest(g: Game): void {
 }
 
 function toCamp(g: Game): void {
+  if (g.weaponChoice !== 'random') g.weapon = g.weaponChoice
   setMode(g, 'camp')
   g.hunter = { ...g.hunter, move: 'idle', t: 0, x: HUNTER.campX, facing: 1, hp: HUNTER.hpMax, rollIn: -1, intent: null, attack: null }
   g.monster.attack = null

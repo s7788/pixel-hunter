@@ -334,8 +334,14 @@ test('a pick made out of camp waits for the next trip out, and never changes the
   expect(g.weapon).toBe('greatsword')
   g = rest(endTurn(g), 30)
   expect(g.mode).toBe('camp')
+  // back at camp: in hand without waiting for the trip out
+  expect(g.weapon).toBe('longsword')
   g = beginTurn(g)
   expect(g.weapon).toBe('longsword')
+  // on the way home: in hand at once
+  g = endTurn(run(g, 200))
+  expect(g.mode).toBe('retreating')
+  expect(chooseWeapon(g, 'bow').weapon).toBe('bow')
 })
 
 test('random draws a weapon for each new hunt and keeps it for a hunt carried over', () => {

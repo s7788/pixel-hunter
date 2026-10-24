@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { HUNTER, TICK_MS, VELKHANA } from './data'
@@ -18,6 +19,25 @@ const PANE = {
     view: {},
   },
 } as const
+
+/**
+ * `mock.store` with a window on it: an in-memory store whose `save` (written
+ * on a press, a turn start and a mode change) the test can read back.
+ */
+function memStore(on: On, entries: Record<string, unknown> = {}): () => Game {
+  const data = new Map<string, unknown>(Object.entries(entries))
+  on('store.get', (_, e) => ({ value: data.get(e.key) }))
+  on('store.set', (_, e) => {
+    data.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('store.delete', (_, e) => {
+    data.delete(e.key)
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: [...data.keys()] }))
+  return () => data.get('save') as Game
+}
 
 const run = (g: Game, ticks: number, working = true): Game => {
   let out = g
@@ -148,21 +168,25 @@ test('/hunt-demo toggles the hunt without a turn', async ($, on) => {
 test('a new session picks the stored hunt back up at camp', async ($, on) => {
   const midFight = run(beginTurn(newGame(11)), 300)
   mock.clock(on)
-  mock.store(on, { save: midFight })
+  const saved = memStore(on, { save: midFight })
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /save restored/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /mode camp/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: new RegExp(`hunt #${midFight.huntNo}`) })).toBeDefined()
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('8-bit hunt: camp')
   await ui.unmount()
+  // the next turn carries on the stored hunt, not a new one
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  const g = saved()
+  expect(g.huntNo).toBe(midFight.huntNo)
+  expect(g.hunt?.monsterHp).toBe(midFight.hunt?.monsterHp)
 })
 
 test('camp shows the weapon buttons; a press takes the weapon up; a hunt locks them', async ($, on) => {
   mock.clock(on)
-  mock.store(on)
+  const saved = memStore(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -173,7 +197,8 @@ test('camp shows the weapon buttons; a press takes the weapon up; a hunt locks t
   await ui.press({ key: 'weapon-longsword' })
   await ui.unmount()
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /mode camp \/ longsword/ })).toBeDefined()
+  expect(saved().weapon).toBe('longsword')
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('武器 太刀</text>')
   expect(await ui.find({ type: 'Button', key: 'weapon-longsword', text: /● 太刀/ })).toBeDefined()
   await ui.unmount()
   await $.turn.start({ text: 'go', turnId: 't1' })
@@ -197,7 +222,7 @@ test('a long hunt with each weapon fits the Svg source limit', () => {
 
 test('a press in camp after a real turn, with the clock ticking, changes the weapon', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
-  mock.store(on, { save: run(beginTurn(newGame(11)), 300) })
+  const saved = memStore(on, { save: run(beginTurn(newGame(11)), 300) })
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -209,10 +234,10 @@ test('a press in camp after a real turn, with the clock ticking, changes the wea
   await $.turn.complete({ reason: 'answer', turnId: 't1', answer: '' } as never)
   await clock.advance(5000)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /mode camp \/ greatsword/ })).toBeDefined()
+  expect(saved().weapon).toBe('greatsword')
   await ui.press({ key: 'weapon-bow' })
   await clock.advance(1000)
-  expect(await ui.find({ type: 'Text', text: /mode camp \/ bow/ })).toBeDefined()
+  expect(saved().weapon).toBe('bow')
   await ui.unmount()
 })
 
@@ -222,4 +247,39 @@ test('the picture names the weapon in hand as text, with no boxes that look like
   expect(svg).toContain('武器 太刀</text>')
   expect(svg).not.toContain('大劍</text>')
   expect(huntSvg('camp', viewOf(chooseWeapon(newGame(3), 'random')), '00:00', false)).toContain('（隨機）</text>')
+})
+
+test('the buttons come back the moment the turn ends; a pick on the way home is in hand at once', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const saved = memStore(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await clock.advance(10_000)
+  expect(saved().mode).toBe('fight')
+  await $.turn.complete({ reason: 'answer', turnId: 't1', answer: '' } as never)
+  // no tick yet: the hunter is still out there, running home
+  expect(saved().mode).toBe('retreating')
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.findAll({ type: 'Button', text: /^[●○] / })).toHaveLength(4)
+  await ui.press({ key: 'weapon-bow' })
+  expect(saved().weapon).toBe('bow')
+  await ui.unmount()
+})
+
+test('the pane shows no debug text, only the debug toggles', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.findAll({ type: 'Text' })).toHaveLength(0)
+  expect(await ui.find({ type: 'Button', text: /碰撞框/ })).toBeDefined()
+  await ui.unmount()
 })
