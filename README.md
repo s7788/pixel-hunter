@@ -28,7 +28,7 @@ In the desktop app, click **+** next to the prompt box, then **Plugins** → **A
 
 Needs Claude Code 2.1.275 or later (tested on 2.1.304 in the desktop app). The desktop app, VS Code and mobile draw the pixel art. The terminal draws it in character cells, or as an image in terminals that show images (kitty, Ghostty, iTerm2, WezTerm, foot); a button in the pane switches between the two.
 
-The game speaks your language: Traditional Chinese where Claude does, English everywhere else. It follows Claude's `language` setting, then your locale.
+The game speaks your language: Traditional Chinese where Claude does, English everywhere else. It follows Claude's `language` setting, then your system locale.
 
 ## How it plays
 

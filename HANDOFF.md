@@ -256,7 +256,7 @@
 ## 語系（武器線 v0.6，v0.10 合併）
 
 - 文字全部在 `hooks/i18n.ts`（繁中 `ZH`、英文 `EN`）。引擎只存 id：`g.label` 是畫面提示的 id，招式提示用招式 id；`svg.ts` 與 pane 畫的時候才用 `t(lang, id)` 查字。舊存檔裡存成中文的提示查不到 id，就照原樣顯示。
-- 語言在 `session.start` 判斷一次，存在 `$.state` 的 `lang`（`detectLang`）。順序：Claude 的 `language` 設定（`$.settings.read({ key: 'language' })`）→ `LC_ALL`／`LC_MESSAGES`／`LANG` → `Intl` 的系統地區；取第一個有值的來源。繁體中文（繁體中文、Traditional Chinese、zh-TW、zh_Hant、zh-HK…）畫中文，其他一律英文，簡體中文也是英文。讀不到的來源略過。
+- 語言在 `session.start` 判斷一次，存在 `$.state` 的 `lang`（`detectLang`）。順序：Claude 的 `language` 設定（`$.settings.read({ key: 'language' })`）→ `Intl` 的系統地區（macOS／Linux 上它本來就跟著 `LANG`／`LC_ALL`）；不自己讀環境變數，claudemods 的權限掃描因此是 L0；取第一個有值的來源。繁體中文（繁體中文、Traditional Chinese、zh-TW、zh_Hant、zh-HK…）畫中文，其他一律英文，簡體中文也是英文。讀不到的來源略過。
 - 冰呪龍的英文名用官方英文名 Velkhana。改了 `language` 設定要重載 mod 或開新 session 才會換語言。
 - 測試裡畫面的語言靠 `speaks(on, language)` 指定，不要依賴跑測試那台電腦的地區。
 

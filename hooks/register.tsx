@@ -74,24 +74,18 @@ async function advance($: EngineInterface): Promise<void> {
 
 /**
  * Traditional Chinese where Claude speaks it, English for everyone else:
- * Claude's `language` setting first, then the locale variables, then the
- * system locale. A source that cannot be read is passed over.
+ * Claude's `language` setting first, then the system locale (on macOS and
+ * Linux it already follows LANG / LC_ALL, so the mod reads no environment
+ * variables of its own). A setting that cannot be read is passed over.
  */
 async function detectLang($: EngineInterface): Promise<HuntLang> {
-  const tryRead = async (read: () => Promise<unknown>): Promise<unknown> => {
-    try {
-      return await read()
-    } catch {
-      return undefined
-    }
+  let language: unknown
+  try {
+    language = await $.settings.read({ key: 'language' })
+  } catch {
+    language = undefined
   }
-  return pickLang([
-    await tryRead(() => $.settings.read({ key: 'language' })),
-    await tryRead(() => $.env.get('LC_ALL')),
-    await tryRead(() => $.env.get('LC_MESSAGES')),
-    await tryRead(() => $.env.get('LANG')),
-    Intl.DateTimeFormat().resolvedOptions().locale,
-  ])
+  return pickLang([language, Intl.DateTimeFormat().resolvedOptions().locale])
 }
 
 async function pickWeapon($: EngineInterface, choice: HuntWeaponChoice): Promise<void> {
