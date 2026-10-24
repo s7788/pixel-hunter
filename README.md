@@ -77,7 +77,7 @@ hunt-8bit is an unofficial fan project, inspired by Monster Hunter. It is not af
 
 ## License
 
-The source code is under the [MIT License](LICENSE). The license does not cover the pixel art (the sprites and scenes in `hooks/gen` and the images in `docs/media`) or the names of the monsters and their moves, which come from the Monster Hunter series; those are not offered for reuse. Monster Hunter is a trademark of Capcom.
+The source code is under the [MIT License](LICENSE). The license does not cover the pixel art (the sprites and scenes in `hooks/gen` and the images in `docs/media`) or the names of the monsters and their moves, which come from the Monster Hunter series; those are not offered for reuse. Monster Hunter is a trademark of Capcom. See [NOTICE](NOTICE).
 
 ## Contributing
 

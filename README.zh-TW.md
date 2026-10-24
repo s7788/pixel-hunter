@@ -77,7 +77,7 @@ hunt-8bit 是非官方的同人專案，靈感來自魔物獵人系列，與 Cap
 
 ## 授權
 
-程式碼採用 [MIT 授權](LICENSE)。授權範圍不包含像素美術（`hooks/gen` 裡的角色與場景、`docs/media` 裡的圖片），也不包含魔物與招式的名稱：它們來自魔物獵人系列，不開放再利用。Monster Hunter 是 Capcom 的商標。
+程式碼採用 [MIT 授權](LICENSE)。授權範圍不包含像素美術（`hooks/gen` 裡的角色與場景、`docs/media` 裡的圖片），也不包含魔物與招式的名稱：它們來自魔物獵人系列，不開放再利用。Monster Hunter 是 Capcom 的商標。詳見 [NOTICE](NOTICE)。
 
 ## 參與開發
 
