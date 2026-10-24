@@ -1,4 +1,4 @@
-import type { LocalBox, Part } from './collision-data'
+import type { HitDef, LocalBox, Part } from './collision-data'
 import { BOXES } from './collision-data'
 import type { ActionId } from './sprites'
 
@@ -29,26 +29,60 @@ export function hurtboxes(action: ActionId, pose: number, at: Placement): Placed
   return (Object.entries(set) as [Part, LocalBox][]).map(([part, box]) => ({ part, box: toWorld(box, at) }))
 }
 
-/** The attack's boxes on this pose; empty off its active pose. */
-export function hitboxes(action: ActionId, pose: number, at: Placement): Aabb[] {
-  const hit = BOXES[action].hit
-  return hit === undefined || hit.pose !== pose ? [] : hit.boxes.map(b => toWorld(b, at))
+/** A local box moved `dx` pixels along the local x axis. */
+export const shifted = ([x0, y0, x1, y1]: LocalBox, dx: number): LocalBox => [x0 + dx, y0, x1 + dx, y1]
+
+/** Every attack pose of an action: the first, then a combo's others. */
+export const hitDefs = (action: ActionId): HitDef[] => {
+  const own = BOXES[action]
+  return own.hit === undefined ? [] : [own.hit, ...(own.more ?? [])]
+}
+
+/**
+ * The attack's boxes on this pose, moved `dx` local pixels (a projectile in
+ * flight) and box i `dys[i]` pixels down (a spread volley); empty off its attack poses.
+ */
+export function hitboxes(action: ActionId, pose: number, at: Placement, dx = 0, dys?: readonly number[]): Aabb[] {
+  const hit = hitDefs(action).find(h => h.pose === pose)
+  if (hit === undefined) return []
+  return hit.boxes.map((b, i) => {
+    const moved = dx === 0 ? b : shifted(b, dx)
+    const dy = dys?.[i] ?? 0
+    return toWorld(dy === 0 ? moved : [moved[0], moved[1] + dy, moved[2], moved[3] + dy], at)
+  })
 }
 
 /** Every box of an attack action regardless of pose, for the wind-up preview. */
 export function attackReach(action: ActionId, at: Placement): Aabb[] {
-  return (BOXES[action].hit?.boxes ?? []).map(b => toWorld(b, at))
+  return hitDefs(action).flatMap(h => h.boxes.map(b => toWorld(b, at)))
 }
 
 export const activePose = (action: ActionId): number | undefined => BOXES[action].hit?.pose
 
 /** Would this attack, thrown from here, touch the target as it stands now? */
 export function reaches(attack: ActionId, from: Placement, target: ActionId, pose: number, at: Placement): boolean {
-  const hurt = hurtboxes(target, pose, at)
-  return attackReach(attack, from).some(a => hurt.some(h => overlaps(a, h.box)))
+  return touchesAny(attackReach(attack, from), target, pose, at)
 }
 
-const PRIORITY: Record<Part, number> = { hunter_body: 0, head: 0, body: 1, tail: 2 }
+/** Do any of these (world) boxes touch the target as it stands now? */
+export function touchesAny(boxes: Aabb[], target: ActionId, pose: number, at: Placement): boolean {
+  const hurt = hurtboxes(target, pose, at)
+  return boxes.some(a => hurt.some(h => overlaps(a, h.box)))
+}
+
+/** Special parts first, then head, body, tail (spec 4.9). */
+const PRIORITY: Record<Part, number> = {
+  belly: -1,
+  wing_near: -1,
+  wing_far: -1,
+  spike_head: -1,
+  spike_arm_near: -1,
+  spike_arm_far: -1,
+  hunter_body: 0,
+  head: 0,
+  body: 1,
+  tail: 2,
+}
 
 export type Touch = { part: Part; point: { x: number; y: number } }
 

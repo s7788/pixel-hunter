@@ -1,3 +1,4 @@
+import type { HuntWeapon, HuntWeaponChoice } from '../types'
 import type { ActionId, SceneId } from './sprites'
 
 /**
@@ -18,6 +19,11 @@ export type Move = {
   stamina?: number
   /** Decision weight among the attacks of the same actor. */
   weight?: number
+  /**
+   * The action whose boxes it is hit on, when not the one drawn: a weapon's run
+   * is drawn as its stepping stance but hit as C03, the body the moves are tuned to.
+   */
+  body?: ActionId
 }
 
 export const HUNTER = {
@@ -34,7 +40,7 @@ export const HUNTER = {
   rollDistance: 30,
   minX: 16,
   /** Chance to roll when a monster attack is predicted to reach; drawn once per attack. */
-  dodgeRate: 0.7,
+  dodgeRate: 0.4,
   idleTicks: [4, 10] as const,
   /** Chance to stand and wait instead of attacking when a normal opening comes. */
   waitWeight: 20,
@@ -47,6 +53,14 @@ export const HUNTER = {
     charge: { action: 'G03', ticks: [3, 6, 3, 4], active: 2, damage: 30, stamina: 2, weight: 50 },
     trueCharge: { action: 'G05', ticks: [4, 3, 4, 4], active: 3, damage: 55, stamina: 3 },
     tackle: { action: 'G06', ticks: [3, 3, 3, 3], active: 2, damage: 12, stamina: 1, weight: 30 },
+    // long sword: quick cuts; the spirit roundslash for openings
+    lsChain: { action: 'L02', ticks: [3, 3, 3, 3], active: 1, damage: 16, stamina: 1, weight: 50 },
+    lsFade: { action: 'L03', ticks: [3, 3, 4, 3], active: 1, damage: 12, stamina: 1, weight: 30 },
+    lsRound: { action: 'L05', ticks: [3, 4, 3, 5], active: 1, damage: 36, stamina: 3 },
+    // bow: shots from range; the power shot for openings
+    bowShot: { action: 'B04', ticks: [3, 3, 3, 3], active: 2, damage: 10, stamina: 1, weight: 50 },
+    bowQuick: { action: 'B05', ticks: [2, 2, 3, 2], active: 2, damage: 7, stamina: 1, weight: 30 },
+    bowPower: { action: 'B06', ticks: [3, 4, 3, 4], active: 2, damage: 28, stamina: 3 },
     // camp only: walk to the fire, kneel by it (C21 F1), eat the meat (C21 F4)
     walk: { action: 'C02', ticks: [3, 3, 3, 3] },
     roast: { action: 'C21', ticks: [1] },
@@ -58,34 +72,55 @@ export const HUNTER = {
 
 export type HunterMove = keyof typeof HUNTER.moves
 
-export const VELKHANA = {
-  name: '冰呪龍',
-  species: '古龍',
-  /** Minutes of Claude's work one hunt is tuned to last; damage scales to it. */
-  targetMinutes: 5,
-  /** New hunts alternate between these grounds; a hunt never changes ground. */
-  scenes: ['S02', 'S04'] as const satisfies readonly SceneId[],
-  x: 262,
-  /** Leftmost the monster walks in to reach the hunter. */
-  minX: 200,
-  enterFromX: 440,
-  walkStep: 12,
-  idleTicks: [16, 40] as const,
-  /** Damage taken between flinches, and between topples. */
-  flinchEvery: 70,
-  toppleEvery: 200,
-  moves: {
-    idle: { action: 'V01', ticks: [3, 3, 3, 3] },
-    walk: { action: 'V02', ticks: [3, 3, 3, 3], weight: 15 },
-    tailStab: { action: 'V14', ticks: [5, 3, 3, 3], active: 2, damage: 2, weight: 50 },
-    iceBeam: { action: 'V17', ticks: [3, 4, 6, 3], active: 2, damage: 2, weight: 35 },
-    flinch: { action: 'V23', ticks: [3, 3, 3, 3] },
-    topple: { action: 'V25', ticks: [3, 3, 3, 40] },
-    getup: { action: 'V26', ticks: [3, 4, 4, 3] },
-  } satisfies Record<string, Move>,
-} as const
+/** The shared moves a weapon draws its own way (C01/C02/C03/C08 show the great sword). */
+export type WeaponMove = 'idle' | 'run' | 'walk' | 'roll'
 
-export type MonsterMove = keyof typeof VELKHANA.moves
+type Weapon = {
+  /** In place of the shared moves, in camp too; same timing as the move they replace. */
+  moves?: Readonly<Partial<Record<WeaponMove, Move>>>
+  /** The dodge is a slide back facing the monster, not a roll turned away from it. */
+  dodgeFacesFoe?: boolean
+  /** Picked by weight when a normal opening comes. */
+  attacks: readonly HunterMove[]
+  /** On a flinch or topple: the first one the stamina allows. */
+  openers: readonly HunterMove[]
+}
+
+/**
+ * The three weapons. Each one's damage is scaled by a fixed-seed run so that
+ * every weapon takes about `targetMinutes` (engine.ts `damageScale`).
+ */
+export const WEAPONS: Readonly<Record<HuntWeapon, Weapon>> = {
+  greatsword: { attacks: ['charge', 'tackle'], openers: ['trueCharge', 'charge', 'tackle'] },
+  longsword: {
+    moves: {
+      idle: { action: 'L01', ticks: [6, 6] },
+      run: { action: 'L01', ticks: [2, 2], body: 'C03' },
+      walk: { action: 'L01', ticks: [3, 3] },
+      // L06 F1, F2 held, F4: the foresight slide back, without its counter cut
+      roll: { action: 'L06', ticks: [2, 4, 4, 2], stamina: 1 },
+    },
+    dodgeFacesFoe: true,
+    attacks: ['lsChain', 'lsFade'],
+    openers: ['lsRound', 'lsChain', 'lsFade'],
+  },
+  bow: {
+    moves: {
+      idle: { action: 'B01', ticks: [6, 0, 0, 6] },
+      run: { action: 'B01', ticks: [2, 2, 2, 2], body: 'C03' },
+      walk: { action: 'B01', ticks: [3, 3, 3, 3] },
+      roll: { action: 'B07', ticks: [2, 4, 4, 2], stamina: 1 },
+    },
+    dodgeFacesFoe: true,
+    attacks: ['bowShot', 'bowQuick'],
+    openers: ['bowPower', 'bowShot', 'bowQuick'],
+  },
+}
+
+/** The camp's buttons, in order; each id is also its text id (hooks/i18n.ts). */
+export const WEAPON_CHOICES: readonly HuntWeaponChoice[] = [...(Object.keys(WEAPONS) as HuntWeapon[]), 'random']
+
+/** The monsters' tuning lives with each species in hooks/monsters. */
 
 /** The two bodies never overlap: the gap kept between their body boxes. */
 export const BODY_GAP = 2

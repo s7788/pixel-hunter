@@ -1,40 +1,88 @@
 # hunt-8bit
 
-8-bit 自動狩獵伴侶：右側 pane 常駐，獵人（大劍）跟著 Claude 的主回合出營、狩獵冰呪龍、撤退。美術方向來自 `hunt_8bit_reference`（v1.2）參考包，以像素改編為準，不是原作素材。
+**An 8-bit hunter that fights while Claude works.**
 
-## 第一版範圍
+A side pane for Claude Code. When you send Claude a prompt, your hunter leaves camp and hunts one of nine monsters. When Claude answers, the hunter runs back to camp and roasts meat until your next prompt. A hunt takes two to seven minutes of Claude's working time, depending on the monster, and a wounded monster waits for you across turns and sessions.
 
-- 動作 15 組（交接文件第一里程碑）：C01／C03／C08／C15／C17、G03／G05／G06、V01／V02／V14／V17／V23／V25／V26；太刀與弓在武器列停用並標 v2。
-- 場景：S03 營地；狩獵場 S02 與 S04 每場輪替，一場中途不換景；S01 已擷取備用。
-- 連動：主回合開始時出營或續打；回合完成時鏡像跑離並回營（HP 補滿、進度保存）；中斷時畫面凍結並顯示「暫停」；子代理的回合忽略。`working_elapsed` 只計主回合，含工具時間。
-- 結束規則：冰呪龍有隱藏血量，跨回合、跨 session 累積（`$.store`，全域只有一位獵人），歸零時播 V25 倒地完成討伐，下一個回合再開新一場。獵人力竭時播 C17 回營，冰呪龍的血量保留。
-- 戰鬥：本機規則加權重的隨機狀態機（`hooks/engine.ts`），數值在 `hooks/data.ts`。冰呪龍血量由固定種子的模擬自動校正到 `targetMinutes`（目前 5 分鐘）。40 場模擬平均 5.1 分鐘、約 38% 的場次會力竭。
-- 營地（v0.3）：回合之間獵人會走到營火旁烤肉、吃肉；回合開始立刻出營。
-- 碰撞（v0.2）：只有攻擊框在有效姿勢碰到受擊框才扣血，同招對同目標只算一次；獵人會跑近、往後翻滾，冰呪龍只用碰得到的招。框在 `hooks/collision-data.ts`，pane 的「除錯 ▾ → 碰撞框」可疊在畫面上看。
+![The hunter roasts meat at camp, then fights Tigrex with the great sword, Zinogre with the long sword and Velkhana with the bow](docs/media/demo.gif)
 
-## 指令
+[繁體中文](README.zh-TW.md)
 
-- `/hunt`：開啟 pane。
-- `/hunt-demo`：不經 Claude 回合，手動切換狩獵或撤退（除錯用）。
-- pane 下方的「除錯 ▸／▾」：顯示狀態機、事件與 SVG 字元數（上限 131,072）。
+## Install
 
-## 素材管線
+At the prompt of a Claude Code terminal session:
 
-`tools/extract_sprites.py` 依 `tools/extract_spec.json` 從參考包擷取：
-
-- 動作板以原圖 1:1 擷取。處理只有：從裁切邊緣灌填去背、去除封閉的底色區塊、切除地面線、把各格平移對齊 F1（不改像素）、同群組共用調色盤量化。大劍板放大 1.25 倍，對齊 01／02 板的身高。
-- 場景縮成 128×72、16 色，顯示時放大 3 倍。
-- 輸出到 `hooks/gen/*.ts`，每列以 RLE 儲存（引擎讀取單檔的上限是 1 MB）。
-
-```bash
-PYTHONUTF8=1 python -I tools/extract_sprites.py <hunt_8bit_reference 資料夾>
+```
+/plugin install hunt-8bit --marketplace s7788/hunt-8bit
 ```
 
-`--sheet <png>` 輸出擷取總覽圖，`--measure` 只量測尺寸。
+Answer `y` to add the marketplace, then pick a scope. The plugin is active right away.
 
-## 已知限制與 v2 項目
+From a shell:
 
-- 特效沒有分層：吐息、刀光、冰屑保留在角色影格裡。命中只依資料裡的 `active` 姿勢判定，不從發光像素推定。分層列為 v2。
-- 每組動作只有 F1–F4 四個關鍵姿勢，沒有補中間影格，也沒有逐幀校正持武器的手。
-- 參考板之間的比例不一致：獵人和冰呪龍的相對大小沿用各板原樣，冰呪龍維持 1:1。
-- 未實作：太刀、弓、武器切換點擊、V29 死亡動作、其他魔物、S01 的使用。
+```bash
+claude plugin install hunt-8bit --marketplace s7788/hunt-8bit
+```
+
+In the desktop app, click **+** next to the prompt box, then **Plugins** → **Add marketplace** with `s7788/hunt-8bit`, then **Add plugin**.
+
+Needs Claude Code 2.1.275 or later (tested on 2.1.304 in the desktop app). The desktop app, VS Code and mobile draw the pixel art. The terminal draws it in character cells, or as an image in terminals that show images (kitty, Ghostty, iTerm2, WezTerm, foot); a button in the pane switches between the two.
+
+The game speaks your language: Traditional Chinese where Claude does, English everywhere else. It follows Claude's `language` setting, then your locale.
+
+## How it plays
+
+- **Your turn is the hunt.** A prompt sends the hunter out; Claude's answer, or you interrupting it, brings the hunter home. Subagents don't count, only the main turn.
+- **A new monster each hunt.** Every new hunt draws one of nine, each on its own hunting ground with its own moves and tricks: Great Jagras swells its belly, Tobi-Kadachi charges up, Anjanath readies fire, Barioth loses its wings, Nargacuga and Tigrex rage, Zinogre supercharges, Ruiner Nergigante grows spikes.
+- **The fight runs itself.** The hunter reads the monster's moves: it dodges what would hit it, backs off, runs in, and only swings when the blow would land.
+- **Damage is real contact.** Every attack has hit boxes; a blow counts only when they touch the target's body.
+- **Progress is kept.** The monster's HP carries over between turns and sessions. Bring it down for a kill; run out of HP and the hunter is carted back to camp, with the monster still wounded. A strip under the picture counts your kills by monster.
+- **Pick your weapon at camp.** Under the picture, between turns: **Great Sword**, **Long Sword**, **Bow** or **Random** (a new draw for each new hunt). Each weapon has its own stance, run, dodge and moves, and they're balanced to hunt every monster at about the same pace.
+
+| | Moves | Character |
+|---|---|---|
+| Great sword | Charged slash, shoulder tackle; true charged slash on an opening | Slow, heavy blows |
+| Long sword | Vertical combo, fade slash; spirit roundslash on an opening | Quick cuts, slides back to dodge |
+| Bow | Normal shot, quick shot; power shot on an opening | Hits from range |
+
+| Monster | Ground | Minutes |
+|---|---|---|
+| Great Jagras | Forest | 2 |
+| Tobi-Kadachi | Forest | 3 |
+| Anjanath | Forest | 4 |
+| Velkhana | Snowfield, ice cave | 5 |
+| Barioth | Snowfield | 5 |
+| Nargacuga | Forest | 5 |
+| Tigrex | Snowfield | 5 |
+| Zinogre | Forest | 6 |
+| Ruiner Nergigante | Crystal ruins | 7 |
+
+![Bow](docs/media/bow.png)
+
+## Commands
+
+- `/hunt` opens the pane (it also opens by itself when a session starts).
+- `/hunt-demo` starts or ends a hunt without a Claude turn, to try it out.
+- `/hunt-demo <monster>` drops the hunt under way and heads out after that monster, for example `/hunt-demo zinogre`.
+
+## Good to know
+
+- **No tokens, no network.** The fight is a small local state machine stepped 8 times a second. It never calls a model, never reads your files and never sends anything anywhere.
+- **Light.** A tick takes well under a millisecond. The first time a weapon meets a monster, the game spends about a second working out its damage scale.
+- **One hunter.** The save lives in the plugin's own store, so every session shares the same hunter and the same wounded monster.
+
+## Fan project
+
+hunt-8bit is an unofficial fan project, inspired by Monster Hunter. It is not affiliated with or endorsed by Capcom. The pixel art is this project's own 8-bit adaptation, not assets taken from any game.
+
+## Contributing
+
+How it's built, the sprite pipeline and the known limits: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Design decisions and the file map: [HANDOFF.md](HANDOFF.md). Checks:
+
+```bash
+claude plugin validate .
+```
+
+```bash
+claude plugin test .
+```

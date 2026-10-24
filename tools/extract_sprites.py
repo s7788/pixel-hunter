@@ -6,7 +6,23 @@ away from the crop edge, the ground line cut, frames of one action translated
 onto F1 (pixels untouched), colors quantized to one palette per group. A group
 may be scaled (nearest neighbour) so boards drawn at different sizes match.
 
-Usage: PYTHONUTF8=1 python -I tools/extract_sprites.py <reference-pack-dir> [--measure | --sheet <png>]
+Usage: PYTHONUTF8=1 python -I tools/extract_sprites.py <reference-pack-dir> [--only <group>] [--measure | --sheet <png>]
+
+--only <group> extracts that one group (its boards relative to the pack given)
+and leaves the other groups and the scenes as they are: the monster packs are
+separate downloads from the first reference pack. A group with
+"resample": "box" is scaled by area averaging with the alpha cut at half, and
+"keepMain": f drops pieces under f of the largest one (effects such as spit,
+dust and motion lines are drawn by the mod on their own layer). An action's
+"ground": [poses] drops those poses onto the other poses' baseline (a leap drawn
+mid-air: the engine lifts the root instead, so the boxes follow it).
+"groundDepth": n looks for the ground line n rows up from the cell's bottom (default 18);
+"boxBoards": [board or null per box] takes a frame from another board (a combo
+finished with a pose from the action's own board). "shadow": true also clears a
+drop shadow drawn under the feet; "pockets": false keeps
+enclosed background-coloured areas, "pocketTol": n narrows what counts as one (white fur
+close to the board colour); with "shadow", "reflood": true floods the background
+again once the shadow is gone (gaps between the legs).
 Spec:  tools/extract_spec.json
 Out:   hooks/gen/<group>.ts and hooks/gen/scenes.ts, each row run-length encoded
        as <palette letter or '.'><count, omitted when 1> (each file stays far
@@ -46,7 +62,7 @@ def background(crop):
     return tuple(v * 8 + 4 for v in mode)
 
 
-def mask_of(crop):
+def mask_of(crop, pockets=True, pocket_tol=POCKET_TOL):
     w, h = crop.size
     px = crop.load()
     bg = background(crop)
@@ -60,10 +76,12 @@ def mask_of(crop):
         is_bg[y][x] = True
         q.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
     # pockets the flood could not reach: large connected areas of background colour
+    if not pockets:
+        return [[not is_bg[y][x] for x in range(w)] for y in range(h)]
     seen = [[False] * w for _ in range(h)]
     for y0 in range(h):
         for x0 in range(w):
-            if is_bg[y0][x0] or seen[y0][x0] or dist(px[x0, y0], bg) > POCKET_TOL:
+            if is_bg[y0][x0] or seen[y0][x0] or dist(px[x0, y0], bg) > pocket_tol:
                 continue
             comp, q = [], deque([(x0, y0)])
             seen[y0][x0] = True
@@ -71,7 +89,7 @@ def mask_of(crop):
                 x, y = q.popleft()
                 comp.append((x, y))
                 for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                    if 0 <= nx < w and 0 <= ny < h and not seen[ny][nx] and not is_bg[ny][nx]                             and dist(px[nx, ny], bg) <= POCKET_TOL:
+                    if 0 <= nx < w and 0 <= ny < h and not seen[ny][nx] and not is_bg[ny][nx]                             and dist(px[nx, ny], bg) <= pocket_tol:
                         seen[ny][nx] = True
                         q.append((nx, ny))
             if len(comp) >= POCKET_MIN:
@@ -80,11 +98,11 @@ def mask_of(crop):
     return [[not is_bg[y][x] for x in range(w)] for y in range(h)]
 
 
-def cut_ground(mask):
-    """Clear the board's ground line: the lowest thin row covering a third of the crop."""
+def cut_ground(mask, depth=18):
+    """Clear the board's ground line: the lowest thin row covering a third of the crop, within `depth` rows of the bottom."""
     h, w = len(mask), len(mask[0])
     for _ in range(3):  # a line may be two tones, or two rows thick
-        for y in range(h - 1, max(h - 18, 2), -1):
+        for y in range(h - 1, max(h - depth, 2), -1):
             covered = sum(mask[y])
             above = sum(1 for x in range(w) if mask[y][x] and mask[y - 2][x])
             if covered >= 0.3 * w and above < 0.5 * covered:
@@ -93,6 +111,42 @@ def cut_ground(mask):
                 break
         else:
             return
+
+
+def cut_shadow(mask, rows=8, band=8):
+    """Clear a drop shadow the figure stands on: the widest plateau among its lowest rows (the feet merge into it)."""
+    h, w = len(mask), len(mask[0])
+    cov = [sum(r) for r in mask]
+    filled = [y for y in range(h) if cov[y]]
+    if not filled:
+        return
+    low = list(range(max(filled[-1] - rows + 1, 0), filled[-1] + 1))
+    peak = max(low, key=lambda y: (cov[y], y))
+    if cov[peak] < 0.3 * w:
+        return
+    top = peak
+    while top - 1 >= 0 and peak - top < band and cov[top - 1] >= 0.94 * cov[peak]:
+        top -= 1
+    for y in range(top, h):
+        mask[y] = [False] * w
+
+
+def reflood(mask, crop, bg):
+    """Flood the background again from the edges once the shadow is cut: gaps between the legs open up."""
+    h, w = len(mask), len(mask[0])
+    px = crop.load()
+    seen = [[False] * w for _ in range(h)]
+    q = deque((x, y) for x in range(w) for y in (0, h - 1))
+    q.extend((x, y) for y in range(h) for x in (0, w - 1))
+    while q:
+        x, y = q.popleft()
+        if not (0 <= x < w and 0 <= y < h) or seen[y][x]:
+            continue
+        if mask[y][x] and dist(px[x, y], bg) > BG_TOL:
+            continue
+        seen[y][x] = True
+        mask[y][x] = False
+        q.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
 
 
 def drop_hairlines(mask, rows=12, min_run=8):
@@ -119,7 +173,7 @@ def drop_hairlines(mask, rows=12, min_run=8):
             x = max(end, x + 1)
 
 
-def drop_islands(mask, keep_left_of=None):
+def drop_islands(mask, keep_left_of=None, min_island=MIN_ISLAND):
     h, w = len(mask), len(mask[0])
     seen = [[False] * w for _ in range(h)]
     for y in range(h):
@@ -136,9 +190,65 @@ def drop_islands(mask, keep_left_of=None):
                         seen[ny][nx] = True
                         q.append((nx, ny))
             far = keep_left_of is not None and min(c[0] for c in comp) > keep_left_of
-            if len(comp) < MIN_ISLAND or far:
+            if len(comp) < min_island or far:
                 for cx, cy in comp:
                     mask[cy][cx] = False
+
+
+def keep_main(rgba, share):
+    """Clear connected pieces smaller than `share` of the largest (8-connected)."""
+    w, h = rgba.size
+    a = rgba.getchannel('A').load()
+    px = rgba.load()
+    seen = [[False] * w for _ in range(h)]
+    comps = []
+    for y0 in range(h):
+        for x0 in range(w):
+            if not a[x0, y0] or seen[y0][x0]:
+                continue
+            comp, q = [], deque([(x0, y0)])
+            seen[y0][x0] = True
+            while q:
+                x, y = q.popleft()
+                comp.append((x, y))
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < w and 0 <= ny < h and a[nx, ny] and not seen[ny][nx]:
+                            seen[ny][nx] = True
+                            q.append((nx, ny))
+            comps.append(comp)
+    if not comps:
+        return rgba
+    biggest = max(len(c) for c in comps)
+    for c in comps:
+        if len(c) < share * biggest:
+            for x, y in c:
+                px[x, y] = (0, 0, 0, 0)
+    return rgba
+
+
+def box_scale(img, s):
+    """Area-average scale; a pixel stays only where at least half its area was covered."""
+    out = img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.BOX)
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, al = px[x, y]
+            px[x, y] = (r, g, b, 255) if al >= 128 else (0, 0, 0, 0)
+    return out
+
+
+def dehalo(mask, crop, bg, passes, tol=60):
+    """Peel outline pixels that are mostly board background (its anti-aliasing), `passes` times."""
+    h, w = len(mask), len(mask[0])
+    px = crop.load()
+    for _ in range(passes):
+        edge = [(x, y) for y in range(h) for x in range(w) if mask[y][x] and dist(px[x, y], bg) < tol and any(
+            not (0 <= nx < w and 0 <= ny < h) or not mask[ny][nx]
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))]
+        for x, y in edge:
+            mask[y][x] = False
 
 
 def frame_rgba(board, box, blanks, action):
@@ -149,10 +259,19 @@ def frame_rgba(board, box, blanks, action):
         x1, y1 = min(crop.width, bx[2] - box[0]), min(crop.height, bx[3] - box[1])
         if x0 < x1 and y0 < y1:
             crop.paste(background(crop), (x0, y0, x1, y1))
-    mask = mask_of(crop)
-    cut_ground(mask)
+    mask = mask_of(crop, action.get('pockets', True), action.get('pocketTol', POCKET_TOL))
+    cut_ground(mask, action.get('groundDepth', 18))
+    if 'groundY' in action:  # a dashed ground line cut_ground cannot see: clear from that board row down
+        for y in range(max(0, action['groundY'] - box[1]), crop.height):
+            mask[y] = [False] * crop.width
+    if action.get('shadow'):
+        cut_shadow(mask)
+        if action.get('reflood'):
+            reflood(mask, crop, background(crop))
     drop_hairlines(mask)
-    drop_islands(mask, action.get('keepLeftOf'))
+    drop_islands(mask, action.get('keepLeftOf'), action.get('minIsland', MIN_ISLAND))
+    if action.get('dehalo'):
+        dehalo(mask, crop, background(crop), action['dehalo'])
     rgba = crop.convert('RGBA')
     px = rgba.load()
     for y in range(crop.height):
@@ -186,6 +305,19 @@ def align(frames, reach=40):
         canvas.paste(f, (reach + dx, 4 + dy), f)
         placed.append(canvas)
     return placed
+
+
+def to_ground(frames, poses):
+    """Move the given poses straight down (or up) so their lowest pixel sits on the other poses' ground line."""
+    base = max(f.getbbox()[3] for i, f in enumerate(frames) if i not in poses)
+    out = []
+    for i, f in enumerate(frames):
+        if i in poses:
+            moved = Image.new('RGBA', f.size, (0, 0, 0, 0))
+            moved.paste(f, (0, base - f.getbbox()[3]), f)
+            f = moved
+        out.append(f)
+    return out
 
 
 def trim(frames):
@@ -245,17 +377,32 @@ def shared_palette(images, colors):
     return pal_img, {CHARS[i]: '#%02x%02x%02x' % tuple(flat[i * 3: i * 3 + 3]) for i in range(colors)}
 
 
+def board_of(action, i):
+    """The board frame i is cut from: the action's own, unless "boxBoards" names another for it."""
+    other = action.get('boxBoards', [])
+    return (other[i] if i < len(other) else None) or action['board']
+
+
 def main():
     pack = sys.argv[1]
     measure = '--measure' in sys.argv
+    only = sys.argv[sys.argv.index('--only') + 1] if '--only' in sys.argv else None
     spec = json.load(open(os.path.join(HERE, 'extract_spec.json'), encoding='utf-8'))
+    if only is not None:
+        spec['groups'] = {only: spec['groups'][only]}
+        spec['actions'] = [a for a in spec['actions'] if a['group'] == only]
+        spec['scenes'] = []
     boards = {}
     raw = {}
     for action in spec['actions']:
-        path = os.path.join(pack, action['board'])
-        board = boards.setdefault(path, Image.open(path).convert('RGB'))
         blanks = [tuple(b) for b in action.get('blank', [])]
-        raw[action['id']] = [frame_rgba(board, tuple(b), blanks, action) for b in action['boxes']]
+        opts = {**spec['groups'].get(action['group'], {}), **action}
+        frames = []
+        for i, b in enumerate(action['boxes']):
+            path = os.path.join(pack, board_of(action, i))
+            board = boards.setdefault(path, Image.open(path).convert('RGB'))
+            frames.append(frame_rgba(board, tuple(b), blanks, opts))
+        raw[action['id']] = frames
     if '--sheet' in sys.argv:
         dest = sys.argv[sys.argv.index('--sheet') + 1]
         cw, ch = 270, 125
@@ -276,13 +423,23 @@ def main():
         members = [a for a in spec['actions'] if a['group'] == gid]
         scaled = {}
         for a in members:
-            s = group.get('scale', {}).get(a['board'], 1.0)
-            scaled[a['id']] = [f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.NEAREST) for f in raw[a['id']]]
+            scales = [group.get('scale', {}).get(board_of(a, i), 1.0) for i in range(len(raw[a['id']]))]
+            if group.get('resample') == 'box':
+                frames = [box_scale(f, s) for f, s in zip(raw[a['id']], scales)]
+            else:
+                frames = [f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.NEAREST)
+                          for f, s in zip(raw[a['id']], scales)]
+            if 'keepMain' in group:
+                frames = [keep_main(f, group['keepMain']) for f in frames]
+            scaled[a['id']] = frames
         pal_img, palette = shared_palette([f for fs in scaled.values() for f in fs], group['colors'])
         out['palette'] = palette
         for a in members:
             frames = scaled[a['id']]
-            frames = trim(align(frames) if a.get('align', True) else frames)
+            frames = align(frames) if a.get('align', True) else frames
+            if 'ground' in a:
+                frames = to_ground(frames, a['ground'])
+            frames = trim(frames)
             out['actions'][a['id']] = {
                 'width': frames[0].width,
                 'anchorX': anchor_x(frames[a.get('anchorFrame', 0)], group.get('anchor', 'feet')),
@@ -290,6 +447,8 @@ def main():
             }
             print(a['id'], gid, frames[0].width, 'x', frames[0].height)
         write_ts(gid, gid.upper(), out)
+    if only is not None:
+        return
     for sc in spec['scenes']:
         img = Image.open(os.path.join(pack, sc['file'])).convert('RGB').resize(tuple(sc['size']), Image.BOX)
         q = img.quantize(colors=sc['colors'], method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
@@ -302,6 +461,9 @@ def main():
         }
         print(sc['id'], img.size)
     write_ts('scenes', 'SCENES', scenes)
+    # S05 has no reference picture: it is drawn by tools/make_s05.py and added back
+    import make_s05
+    make_s05.main()
 
 
 if __name__ == '__main__':

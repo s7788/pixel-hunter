@@ -1,0 +1,14 @@
+{
+  "name": "hunt-8bit",
+  "owner": {
+    "name": "s7788"
+  },
+  "description": "hunt-8bit: an 8-bit monster hunt that plays beside Claude Code while it works.",
+  "plugins": [
+    {
+      "name": "hunt-8bit",
+      "source": "./",
+      "description": "An 8-bit hunter in a side pane that hunts one of nine monsters while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network."
+    }
+  ]
+}
