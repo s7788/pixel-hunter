@@ -64,6 +64,8 @@ test('C02: a hunter 1px out of the stab\'s reach takes nothing', () => {
 
 test('C04/C05/C06: no damage on the wind-up; the first active tick lands; past the window nothing', () => {
   let g = tailStabIn(parked(), 1)
+  // staggered, so it cannot see the stab coming and step away from it
+  g.hunter = { ...g.hunter, move: 'hit', t: 0 }
   g = step(g, true)
   expect(g.hunter.hp).toBe(HUNTER.hpMax)
   g = step(g, true)
@@ -179,7 +181,7 @@ test('C31/C35: the same seed replays the same hits; drawing boxes changes nothin
     let g = beginTurn(newGame(21))
     for (let i = 0; i < 1500; i += 1) {
       g = step(g, true)
-      if (draw) huntSvg('hunting', viewOf(g), '00:00', false, true)
+      if (draw) huntSvg('hunting', viewOf(g), '00:00', true)
     }
     return g
   }
@@ -263,7 +265,7 @@ test('camp between turns: walk to the fire, roast, eat, roast again; HP already 
   expect(g.hunter.x).toBe(CAMP.seatX)
   const view = viewOf(g)
   expect(view.camp).not.toBeNull()
-  expect(huntSvg('camp', view, '88:88:88', false, true).length).toBeLessThan(131072)
+  expect(huntSvg('camp', view, '88:88:88', true).length).toBeLessThan(131072)
 })
 
 test('a turn pulls the hunter away from the fire at once and off the right edge', () => {
@@ -285,17 +287,21 @@ test('a turn pulls the hunter away from the fire at once and off the right edge'
   expect(g.mode).toBe('arriving')
 })
 
-test('the hunter never starts a swing into a monster attack that would reach; one dodge draw per attack', () => {
+test('the hunter never starts a swing the monster attack under way would catch; one dodge draw per attack', () => {
   for (let seed = 1; seed <= 60; seed += 1) {
     const weapon = (Object.keys(WEAPONS) as HuntWeapon[])[seed % 3]!
     let g = tailStabIn(parked(seed, weapon), 6)
     g.hunter.wait = 1
     const draws: string[] = []
-    for (let i = 0; i < 9; i += 1) {
+    const swingTicks = new Set<number>()
+    for (let i = 0; i < 14; i += 1) {
       g = step(g, true)
-      expect(SWINGS[weapon]).not.toContain(g.hunter.move)
+      if (SWINGS[weapon]!.includes(g.hunter.move)) swingTicks.add(g.simTick)
       if (g.hunter.dodgeFor !== null && !draws.includes(g.hunter.dodgeFor)) draws.push(g.hunter.dodgeFor)
     }
+    // the stab may come close, but never lands on a hunter mid-swing
+    const caught = g.hits.filter(h => h.attackId === 't:monster:0' && h.outcome === 'damaged' && swingTicks.has(h.tick))
+    expect(caught).toEqual([])
     expect(draws.length).toBeLessThanOrEqual(1)
   }
 })
@@ -308,7 +314,7 @@ test('a hit records where the boxes met, and the debug view marks it for a momen
   expect(hit.x).toBe(111)
   expect(hit.y).toBeGreaterThan(125)
   expect(viewOf(g).marks).toEqual([{ x: hit.x!, y: hit.y!, outcome: 'damaged' }])
-  expect(huntSvg('hunting', viewOf(g), '00:00', false, true)).toContain('class="bm"')
+  expect(huntSvg('hunting', viewOf(g), '00:00', true)).toContain('class="bm"')
   g.hunter = { ...g.hunter, move: 'idle', t: 0, wait: 999 }
   g = run(g, 8)
   expect(viewOf(g).marks).toEqual([])
@@ -317,7 +323,8 @@ test('a hit records where the boxes met, and the debug view marks it for a momen
 test('a weapon picked in camp is in hand at once; the fight draws its own stance', () => {
   let g = chooseWeapon(newGame(3), 'bow')
   expect(g.weapon).toBe('bow')
-  expect(viewOf(g).hunter.action).toBe('C01')
+  // the camp draws the bow too: its own stance, not C01 with the great sword
+  expect(viewOf(g).hunter.action).toBe('B01')
   g = beginTurn(g)
   while (g.mode !== 'fight') g = step(g, true)
   g = step(g, true)
@@ -384,4 +391,38 @@ test('a save from before weapons (schema 2) gets the great sword and plays on', 
   expect(back.weaponChoice).toBe('greatsword')
   expect(back.mode).toBe(g.mode)
   expect(JSON.stringify(step(back, true).hunt)).toBe(JSON.stringify(step(g, true).hunt))
+})
+
+test('a turn begun during the slain hold sets out on a new hunt once the hold is over', () => {
+  let g = beginTurn(newGame(5))
+  while (g.mode !== 'fight') g = step(g, true)
+  g.hunt!.monsterHp = 1
+  while (g.mode !== 'slain') g = step(g, true)
+  g = beginTurn(step(endTurn(g), false))
+  g = run(g, 400)
+  expect(g.slain).toBe(1)
+  expect(g.hunt).not.toBeNull()
+  expect(g.mode).not.toBe('camp')
+})
+
+test('a hunt saved before it was ever fought still has its monster walk in after a restore', () => {
+  let g = beginTurn(newGame(6))
+  while (g.mode !== 'arriving') g = step(g, true)
+  g = run(g, 4)
+  g = rest(endTurn(g), 30)
+  expect(g.mode).toBe('camp')
+  g = beginTurn(restore(JSON.parse(JSON.stringify(g)) as Game))
+  while (g.mode !== 'fight') g = step(g, true)
+  expect(g.monster.x).toBe(VELKHANA.x)
+})
+
+test('the monster is never toppled again while it is down or getting up', () => {
+  for (let seed = 1; seed <= 6; seed += 1) {
+    let g = beginTurn(newGame(seed))
+    for (let i = 0; i < 12000; i += 1) {
+      const before = g.monster.move
+      g = step(g, true)
+      if (g.monster.move === 'topple' && g.monster.t === 0 && g.mode === 'fight') expect(['topple', 'getup']).not.toContain(before)
+    }
+  }
 })

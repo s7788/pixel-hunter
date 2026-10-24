@@ -51,19 +51,22 @@ async function changeGame($: EngineInterface, fn: (g: Game) => Game): Promise<Ga
   return out!
 }
 
-/** One tick: frozen while paused, otherwise the game steps and the pane redraws. */
+/** One tick: the game steps and the pane redraws. */
 async function advance($: EngineInterface): Promise<void> {
   const p = await read($, phase)
-  if (p === 'paused') return
   const n = await $.clock.now()
   let saved: Game | undefined
+  let isHome = false
   await update($, world, w => {
     if (w === null) return w
     const game = step(w.game, p === 'hunting')
     if ((w.tick + 1) % SAVE_EVERY === 0 || game.mode !== w.game.mode) saved = game
+    isHome = game.mode === 'camp'
     return { tick: w.tick + 1, now: n, game }
   })
   if (saved !== undefined) await save($, saved)
+  // back at camp after a turn: the HUD reads 待機 again, not 撤退
+  if (p === 'retreat' && isHome) await update($, phase, () => 'camp')
 }
 
 async function pickWeapon($: EngineInterface, choice: HuntWeaponChoice): Promise<void> {
@@ -97,14 +100,9 @@ async function finishTurn($: EngineInterface, reason: string): Promise<void> {
   const elapsed = started === null ? 0 : now - started
   await update($, lastElapsedMs, () => elapsed)
   await update($, turnStartedAt, () => null)
-  if (reason === 'answer') {
-    await update($, phase, () => 'retreat')
-    await save($, await changeGame($, endTurn))
-  } else {
-    await update($, phase, () => 'paused')
-    const w = await read($, world)
-    if (w !== null) await save($, w.game)
-  }
+  // answered or interrupted alike: the hunter runs back to camp, the hunt kept
+  await update($, phase, () => 'retreat')
+  await save($, await changeGame($, endTurn))
   await note($, `turn.complete ${reason} ${fmt(elapsed)}`)
 }
 
@@ -134,6 +132,11 @@ export const register: Register = on => {
     await update($, world, w =>
       w !== null ? { ...w, game: migrate(w.game) } : { tick: 0, now, game: stored === undefined ? newGame(now) : restore(stored) },
     )
+    // a turn interrupted under the old pause rule (before a reload): retreat, as an interrupt does now
+    if ((await read($, phase)) === ('paused' as HuntPhase)) {
+      await update($, phase, () => 'retreat')
+      await save($, await changeGame($, endTurn))
+    }
     void $.ui.open({ id: PANE, title: TITLE })
     await note($, stored === undefined ? 'session.start (new hunter)' : 'session.start (save restored)')
     animation?.cancel()
@@ -194,7 +197,7 @@ export const register: Register = on => {
     if (w === null) return <Text dimColor>Hunt is loading…</Text>
     const elapsed = started === null ? last : Math.max(0, w.now - started)
     const view = viewOf(w.game)
-    const source = huntSvg(p, view, fmt(elapsed), p === 'paused', isOpen && isBoxes)
+    const source = huntSvg(p, view, fmt(elapsed), isOpen && isBoxes)
     const g = w.game
     // pickable as soon as the turn ends, whether or not the hunter is back yet (engine.ts chooseWeapon)
     const canChoose = p !== 'hunting'

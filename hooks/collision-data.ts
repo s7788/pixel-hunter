@@ -49,6 +49,8 @@ export const BOXES: Readonly<Record<ActionId, ActionBoxes>> = {
     { "hunter_body": [-10, -58, 32, 0] },
     { "hunter_body": [-12, -72, 24, 0] }
   ], "hit": { "pose": 1, "boxes": [[-60, -92, 92, -8]] } },
+  "L06": { "hurt": [{ "hunter_body": [-20, -60, 24, 0] }] },
+  "B07": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }] },
   "B01": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }] },
   "B04": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }], "hit": { "pose": 2, "boxes": [[55, -50, 150, -34]] } },
   "B05": { "hurt": [{ "hunter_body": [-22, -72, 22, 0] }], "hit": { "pose": 2, "boxes": [[55, -76, 142, -12]] } },

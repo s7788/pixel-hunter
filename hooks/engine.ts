@@ -29,10 +29,10 @@ import { SCENES } from './sprites'
 
 export type { Game }
 
-/** The hunter's move as drawn: out of camp, the idle stance is the weapon's own. */
+/** The hunter's move as drawn: the weapon's own stance, run, walk and dodge where it has them. */
 function hunterMove(g: Game, move: HunterMove): Move {
-  const stance: Move | undefined = move === 'idle' && g.mode !== 'camp' ? WEAPONS[g.weapon].idle : undefined
-  return stance ?? HUNTER.moves[move]
+  const own: Move | undefined = (WEAPONS[g.weapon].moves as Partial<Record<string, Move>> | undefined)?.[move]
+  return own ?? HUNTER.moves[move]
 }
 const monsterMove = (move: MonsterMove): Move => VELKHANA.moves[move]
 
@@ -314,7 +314,7 @@ export function restore(saved: Game): Game {
   const g = migrate(clone(saved))
   if (g.mode === 'slain') g.hunt = null
   if (g.mode !== 'camp') toCamp(g)
-  if (g.hunt !== null && g.mode === 'camp') g.hunt.isFresh = false
+  // a hunt never fought keeps isFresh: its monster still walks in, not from an old x
   g.isResting = false
   return g
 }
@@ -414,7 +414,6 @@ export function step(game: Game, working: boolean): Game {
       if (g.modeT > SLAIN_HOLD) g.hunter.x -= (HUNTER.x + 60) / RUN_TICKS
       if (g.modeT >= SLAIN_HOLD + RUN_TICKS) {
         g.hunt = null
-        g.isResting = true
         toCamp(g)
         say(g, '討伐完成')
       }
@@ -441,7 +440,7 @@ const monsterMinX = (g: Game): number =>
   Math.max(VELKHANA.minX, g.hunter.x + MOVE_BOUNDS.hunter[1] - MOVE_BOUNDS.monster[0] + BODY_GAP)
 
 const isInvulnerable = (g: Game): boolean =>
-  g.hunter.move === 'roll' && (HUNTER.rollInvulnerable as readonly number[]).includes(poseAt(HUNTER.moves.roll, g.hunter.t))
+  g.hunter.move === 'roll' && (HUNTER.rollInvulnerable as readonly number[]).includes(poseAt(hunterMove(g, 'roll'), g.hunter.t))
 
 /** The hunter's blow, scaled so every weapon hunts about as fast. */
 const hunterDamage = (g: Game): number => {
@@ -510,6 +509,8 @@ function settle(g: Game): boolean {
   const monsterFell = toMonster > 0 && hunt.monsterHp === 0
 
   if (monsterFell) {
+    // the next hunt waits for the next turn; set now, so a turn begun during the hold clears it
+    g.isResting = true
     g.slain += 1
     g.lastOutcome = hunterFell ? 'mutual_ko' : null
     if (hunterFell) g.carts += 1
@@ -541,7 +542,8 @@ function settle(g: Game): boolean {
     say(g, '翻滾閃避')
   }
   if (toMonster > 0) {
-    if (hunt.topple >= VELKHANA.toppleEvery) {
+    // never toppled again while down or getting up; the count waits for the next hit
+    if (hunt.topple >= VELKHANA.toppleEvery && m.move !== 'topple' && m.move !== 'getup') {
       hunt.topple = 0
       hunt.stagger = 0
       monsterDo(g, 'topple')
@@ -593,7 +595,7 @@ function fight(g: Game): void {
     h.rollIn -= 1
     if (h.rollIn < 0 && (h.move === 'idle' || h.move === 'run')) {
       h.intent = null
-      h.facing = -1
+      h.facing = WEAPONS[g.weapon].dodgeFacesFoe === true ? 1 : -1
       hunterDo(g, 'roll')
     }
     if (h.move === 'idle') return
@@ -637,13 +639,24 @@ function hunterDecide(g: Game): void {
     h.wait = between(g, HUNTER.idleTicks)
     return
   }
-  if (hunterReaches(g, choice)) attack(g, choice)
+  if (hunterReaches(g, choice)) swing(g, choice)
   else {
     // out of reach: run in first, swing once the blade would land
     h.intent = choice
     h.facing = 1
     hunterDo(g, 'run')
   }
+}
+
+/** Swing, unless the monster's attack under way would catch the swinging body: then stand and let it pass. */
+function swing(g: Game, move: HunterMove): void {
+  if (threat(g, move) !== null) {
+    g.hunter.intent = null
+    if (g.hunter.move !== 'idle') hunterDo(g, 'idle')
+    g.hunter.wait = 1
+    return
+  }
+  attack(g, move)
 }
 
 function attack(g: Game, move: HunterMove): void {
@@ -664,7 +677,7 @@ function runIn(g: Game): void {
     return
   }
   if (hunterReaches(g, intent)) {
-    attack(g, intent)
+    swing(g, intent)
     return
   }
   const next = Math.min(hunterMaxX(g), h.x + HUNTER.runStep)
@@ -693,16 +706,24 @@ function monsterDecide(g: Game): void {
   say(g, move === 'iceBeam' ? '冰吐息' : '尾刺')
 }
 
-/** Ticks until the monster's attack can first touch, while it can still touch; null when no threat. */
-function threat(g: Game): number | null {
+/**
+ * Ticks until the monster's attack can first touch the hunter standing here in
+ * `as` (any of its poses), while it can still touch; null when no threat.
+ * Judged on the body the hunter will have, not the one it has: standing still
+ * after backing off, or swinging (a swing's body reaches further than idle).
+ */
+function threat(g: Game, as: HunterMove): number | null {
   const m = g.monster
   const move = monsterMove(m.move)
   if (m.attack === null || move.active === undefined || m.attack.contacts.some(c => c.target === 'hunter')) return null
   const start = sum(move.ticks.slice(0, move.active))
   const end = start + (move.ticks[move.active] ?? 0)
   if (m.t >= end) return null
-  const [hAction, hPose] = hunterPose(g)
-  return reaches(move.action, monsterAt(g), hAction, hPose, hunterAt(g)) ? Math.max(0, start - m.t) : null
+  const body = hunterMove(g, as)
+  // facing the monster, as the hunter stands once it stops or swings
+  const at = { ...hunterAt(g), renderFlip: 1 as const }
+  const hit = body.ticks.some((_, pose) => reaches(move.action, monsterAt(g), body.action, pose, at))
+  return hit ? Math.max(0, start - m.t) : null
 }
 
 /**
@@ -713,13 +734,13 @@ function threat(g: Game): number | null {
  */
 function watch(g: Game): boolean {
   const h = g.hunter
-  const coming = threat(g)
+  const coming = threat(g, 'idle')
   if (coming === null) return false
   const id = g.monster.attack!.id
   if (h.dodgeFor !== id) {
     h.dodgeFor = id
     if (can(g, 'roll') && rand(g) < HUNTER.dodgeRate) {
-      const safeFrom = sum(HUNTER.moves.roll.ticks.slice(0, HUNTER.rollInvulnerable[0]))
+      const safeFrom = sum(hunterMove(g, 'roll').ticks.slice(0, HUNTER.rollInvulnerable[0]))
       h.rollIn = Math.max(0, coming - safeFrom - 3)
       h.intent = null
       if (h.move === 'run') hunterDo(g, 'idle')

@@ -17,7 +17,6 @@ const PHASE_LABEL: Record<HuntPhase, string> = {
   camp: '待機',
   hunting: '狩獵中',
   retreat: '撤退',
-  paused: '暫停',
 }
 
 /**
@@ -186,10 +185,6 @@ const marks = (list: View['marks']): string =>
     .map(m => `<path class="${m.outcome === 'evaded' ? 'bm bv' : 'bm'}" d="M${m.x - 4} ${m.y - 4}l8 8M${m.x + 4} ${m.y - 4}l-8 8"/>`)
     .join('')
 
-const PAUSED =
-  `<rect width="${W}" height="${H}" fill="#0b1a3a" fill-opacity="0.55"/>` +
-  `<text x="${W / 2}" y="${H / 2 + 8}" class="z">暫停</text>`
-
 const CSS =
   `.t{font:bold 13px monospace;fill:#f4f8ff}` +
   `.n{font:bold 14px sans-serif;fill:#f4f8ff;text-anchor:middle}` +
@@ -197,7 +192,6 @@ const CSS =
   `.c{font:bold 14px monospace;fill:#ffd21f;text-anchor:middle}` +
   `.s{font:bold 12px sans-serif;fill:#ffc23a;text-anchor:middle}` +
   `.w{font:bold 11px sans-serif;fill:#f4f8ff;paint-order:stroke;stroke:#10183a;stroke-width:3px}` +
-  `.z{font:bold 28px sans-serif;fill:#ffc23a;text-anchor:middle}` +
   `.bh{fill:#2ee05a;fill-opacity:.2;stroke:#2ee05a}` +
   `.bx{fill:#ff3030;fill-opacity:.3;stroke:#ff3030}` +
   `.bw{fill:none;stroke:#9aa3b5;stroke-dasharray:2 2}` +
@@ -207,8 +201,8 @@ const CSS =
   `.bv{stroke:#9aa3b5}` +
   `.a{font:bold 13px sans-serif;fill:#f4f8ff;text-anchor:middle;paint-order:stroke;stroke:#10183a;stroke-width:3px}`
 
-/** The picture at one tick; `isFrozen` draws the interrupted hunt under a pause veil, `showBoxes` the collision overlay. */
-export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: boolean, showBoxes = false): string {
+/** The picture at one tick; `showBoxes` draws the collision overlay. */
+export function huntSvg(phase: HuntPhase, view: View, clock: string, showBoxes = false): string {
   const ground = SCENES[view.scene].ground * SCENE_SCALE
   let actors =
     (view.camp === null ? '' : campProps(view.camp)) + (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
@@ -216,7 +210,7 @@ export function huntSvg(phase: HuntPhase, view: View, clock: string, isFrozen: b
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +
     `<style>${CSS}</style><g fill="none" stroke-width="1">${scene(view.scene)}${actors}</g>` +
-    `${hud(phase, view, clock)}${isFrozen ? PAUSED : ''}</svg>`
+    `${hud(phase, view, clock)}</svg>`
   )
 }
 

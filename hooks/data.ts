@@ -37,7 +37,7 @@ export const HUNTER = {
   rollDistance: 30,
   minX: 16,
   /** Chance to roll when a monster attack is predicted to reach; drawn once per attack. */
-  dodgeRate: 0.7,
+  dodgeRate: 0.4,
   idleTicks: [4, 10] as const,
   /** Chance to stand and wait instead of attacking when a normal opening comes. */
   waitWeight: 20,
@@ -69,10 +69,15 @@ export const HUNTER = {
 
 export type HunterMove = keyof typeof HUNTER.moves
 
+/** The shared moves a weapon draws its own way (C01/C02/C03/C08 show the great sword). */
+export type WeaponMove = 'idle' | 'run' | 'walk' | 'roll'
+
 type Weapon = {
   label: string
-  /** The fight stance in place of C01 (which shows the great sword). */
-  idle?: Move
+  /** In place of the shared moves, in camp too; same timing as the move they replace. */
+  moves?: Readonly<Partial<Record<WeaponMove, Move>>>
+  /** The dodge is a slide back facing the monster, not a roll turned away from it. */
+  dodgeFacesFoe?: boolean
   /** Picked by weight when a normal opening comes. */
   attacks: readonly HunterMove[]
   /** On a flinch or topple: the first one the stamina allows. */
@@ -87,13 +92,26 @@ export const WEAPONS: Readonly<Record<HuntWeapon, Weapon>> = {
   greatsword: { label: '大劍', attacks: ['charge', 'tackle'], openers: ['trueCharge', 'charge', 'tackle'] },
   longsword: {
     label: '太刀',
-    idle: { action: 'L01', ticks: [6, 6] },
+    moves: {
+      idle: { action: 'L01', ticks: [6, 6] },
+      run: { action: 'L01', ticks: [2, 2] },
+      walk: { action: 'L01', ticks: [3, 3] },
+      // L06 F1, F2 held, F4: the foresight slide back, without its counter cut
+      roll: { action: 'L06', ticks: [2, 4, 4, 2], stamina: 1 },
+    },
+    dodgeFacesFoe: true,
     attacks: ['lsChain', 'lsFade'],
     openers: ['lsRound', 'lsChain', 'lsFade'],
   },
   bow: {
     label: '弓',
-    idle: { action: 'B01', ticks: [6, 0, 0, 6] },
+    moves: {
+      idle: { action: 'B01', ticks: [6, 0, 0, 6] },
+      run: { action: 'B01', ticks: [2, 2, 2, 2] },
+      walk: { action: 'B01', ticks: [3, 3, 3, 3] },
+      roll: { action: 'B07', ticks: [2, 4, 4, 2], stamina: 1 },
+    },
+    dodgeFacesFoe: true,
     attacks: ['bowShot', 'bowQuick'],
     openers: ['bowPower', 'bowShot', 'bowQuick'],
   },

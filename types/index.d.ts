@@ -1,5 +1,5 @@
-/** The turn side: `paused` freezes the picture until the next main turn. */
-export type HuntPhase = 'camp' | 'hunting' | 'retreat' | 'paused'
+/** The turn side: any end of a main turn (answered or interrupted) is a retreat. */
+export type HuntPhase = 'camp' | 'hunting' | 'retreat'
 
 export type HuntEvent = { at: number; text: string }
 
@@ -66,7 +66,7 @@ export type HuntRun = {
 export type HuntGame = {
   /** 3 since weapons (2 since collision); older saves are migrated. */
   saveSchemaVersion: number
-  /** Simulation ticks (125 ms each); moves only when the game steps, never while paused. */
+  /** Simulation ticks (125 ms each); moves only when the game steps. */
   simTick: number
   /** Next attack serial; never reused, so attack ids stay unique. */
   nextAttackSerial: number

@@ -5,6 +5,8 @@ import { HUNTER, TICK_MS, VELKHANA } from './data'
 import type { Game } from './engine'
 import { beginTurn, chooseWeapon, endTurn, newGame, restore, step, viewOf } from './engine'
 import { huntSvg } from './svg'
+import { ACTIONS } from './sprites'
+import type { ActionId } from './sprites'
 
 const PANE = {
   plugin: 'hunt-8bit',
@@ -45,12 +47,12 @@ const run = (g: Game, ticks: number, working = true): Game => {
   return out
 }
 
-test('every frame of a long hunt fits the Svg source limit, paused veil and collision boxes included', () => {
+test('every frame of a long hunt fits the Svg source limit, collision boxes included', () => {
   let g = beginTurn(newGame(7))
   let largest = 0
   for (let i = 0; i < 3000; i += 1) {
     g = step(g, true)
-    largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', i % 2 === 0, true).length)
+    largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', true).length)
   }
   expect(largest).toBeLessThan(131072)
 })
@@ -112,7 +114,7 @@ test('a save from a session that ended mid-fight comes back at camp, hunt kept',
   expect(back.hunt!.isFresh).toBe(false)
 })
 
-test('main turns hunt, answers retreat, interrupts pause; subagent turns change nothing', async ($, on) => {
+test('main turns hunt; answers and interrupts both retreat; subagent turns change nothing', async ($, on) => {
   mock.clock(on)
   mock.store(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
@@ -137,7 +139,7 @@ test('main turns hunt, answers retreat, interrupts pause; subagent turns change 
   expect(await mount()).toBe('8-bit hunt: retreat')
   await $.turn.start({ text: 'again', turnId: 't2' })
   await $.turn.complete({ reason: 'aborted', turnId: 't2' } as never)
-  expect(await mount()).toBe('8-bit hunt: paused')
+  expect(await mount()).toBe('8-bit hunt: retreat')
 })
 
 test('the terminal draws the pane without the Svg scene', async ($, on) => {
@@ -214,7 +216,7 @@ test('a long hunt with each weapon fits the Svg source limit', () => {
     let largest = 0
     for (let i = 0; i < 3000; i += 1) {
       g = step(g, true)
-      largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', i % 2 === 0, true).length)
+      largest = Math.max(largest, huntSvg('hunting', viewOf(g), '88:88:88', true).length)
     }
     expect(largest).toBeLessThan(131072)
   }
@@ -243,10 +245,10 @@ test('a press in camp after a real turn, with the clock ticking, changes the wea
 
 test('the picture names the weapon in hand as text, with no boxes that look like buttons', () => {
   const picked = viewOf(chooseWeapon(newGame(3), 'longsword'))
-  const svg = huntSvg('camp', picked, '00:00', false)
+  const svg = huntSvg('camp', picked, '00:00')
   expect(svg).toContain('武器 太刀</text>')
   expect(svg).not.toContain('大劍</text>')
-  expect(huntSvg('camp', viewOf(chooseWeapon(newGame(3), 'random')), '00:00', false)).toContain('（隨機）</text>')
+  expect(huntSvg('camp', viewOf(chooseWeapon(newGame(3), 'random')), '00:00')).toContain('（隨機）</text>')
 })
 
 test('the buttons come back the moment the turn ends; a pick on the way home is in hand at once', async ($, on) => {
@@ -300,4 +302,61 @@ test('the pane takes its own presses by key, so one click is one change', async 
   expect(await ui.press({ key: 'debug' })).toEqual({ element: 'debug' })
   expect(await ui.find({ type: 'Button', text: /碰撞框/ })).toBeUndefined()
   await ui.unmount()
+})
+
+test('an interrupted turn runs the hunter home and keeps the hunt, as an answer does', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const saved = memStore(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await clock.advance(30_000)
+  expect(saved().mode).toBe('fight')
+  await $.turn.complete({ reason: 'aborted', turnId: 't1' } as never)
+  expect(saved().mode).toBe('retreating')
+  const wounded = saved().hunt!.monsterHp
+  await clock.advance(5_000)
+  expect(saved().mode).toBe('camp')
+  expect(saved().hunt!.monsterHp).toBe(wounded)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.findAll({ type: 'Button', text: /^[●○] / })).toHaveLength(4)
+  // home again: the HUD and the alt say camp, not retreat
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('8-bit hunt: camp')
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('待機</text>')
+  await ui.unmount()
+})
+
+test('every scene, monster frame and hunter frame together fit the Svg source limit, boxes and marks on', { timeoutMs: 120000 }, () => {
+  const hunterActions = Object.keys(ACTIONS).filter(id => /^[CGLB]/.test(id) && id !== 'C02' && id !== 'C21') as ActionId[]
+  const monsterActions = Object.keys(ACTIONS).filter(id => id.startsWith('V')) as ActionId[]
+  const marks = [1, 2, 3, 4].map(i => ({ x: 150 + i * 10, y: 120, outcome: 'damaged' as const }))
+  let largest = 0
+  for (const scene of VELKHANA.scenes) {
+    for (const m of monsterActions) {
+      for (let mf = 0; mf < ACTIONS[m].frames.length; mf += 1) {
+        for (const h of hunterActions) {
+          for (let hf = 0; hf < ACTIONS[h].frames.length; hf += 1) {
+            for (const facing of [1, -1] as const) {
+              const view = {
+                ...viewOf(newGame(1)),
+                scene,
+                camp: null,
+                label: '雙方倒下・討伐完成',
+                monsterHpPercent: 100,
+                marks,
+                hunter: { action: h, frame: hf, x: 96, facing },
+                monster: { action: m, frame: mf, x: 262, facing: 1 as const },
+              }
+              largest = Math.max(largest, huntSvg('hunting', view, '88:88:88', true).length)
+            }
+          }
+        }
+      }
+    }
+  }
+  expect(largest).toBeLessThan(131072)
 })
