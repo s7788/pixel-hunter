@@ -11,8 +11,6 @@ import { HUNT_SIZE, huntSvg } from './svg'
 const PANE = 'hunt-8bit'
 const TITLE = 'Hunt'
 const SAVE_KEY = 'save'
-const DEBUG_KEY = 'debugOpen'
-const BOXES_KEY = 'boxesOpen'
 /** Ticks between saves while the game moves (10 s). */
 const SAVE_EVERY = 80
 
@@ -21,8 +19,6 @@ const turnStartedAt = atom({ plugin: 'hunt-8bit', key: 'turnStartedAt' } as cons
 const lastElapsedMs = atom({ plugin: 'hunt-8bit', key: 'lastElapsedMs' } as const, 0)
 const world = atom({ plugin: 'hunt-8bit', key: 'world' } as const, null as HuntWorld | null)
 const log = atom({ plugin: 'hunt-8bit', key: 'log' } as const, [] as HuntEvent[])
-const debugOpen = atom({ plugin: 'hunt-8bit', key: 'debugOpen' } as const, true)
-const boxesOpen = atom({ plugin: 'hunt-8bit', key: 'boxesOpen' } as const, false)
 const lang = atom({ plugin: 'hunt-8bit', key: 'lang' } as const, 'en' as HuntLang)
 
 /** working_elapsed: MM:SS, HH:MM:SS past an hour. */
@@ -98,18 +94,6 @@ async function pickWeapon($: EngineInterface, choice: HuntWeaponChoice): Promise
   await note($, `weapon ${choice}`)
 }
 
-async function toggleDebug($: EngineInterface): Promise<void> {
-  const next = !(await read($, debugOpen))
-  await update($, debugOpen, () => next)
-  await $.store.set(DEBUG_KEY, next)
-}
-
-async function toggleBoxes($: EngineInterface): Promise<void> {
-  const next = !(await read($, boxesOpen))
-  await update($, boxesOpen, () => next)
-  await $.store.set(BOXES_KEY, next)
-}
-
 async function startTurn($: EngineInterface, label: string): Promise<void> {
   const now = await $.clock.now()
   await update($, turnStartedAt, () => now)
@@ -147,10 +131,6 @@ export const register: Register = on => {
     await $.command.register({ name: 'hunt', description: 'Open the 8-bit hunt pane' })
     await $.command.register({ name: 'hunt-demo', description: 'Toggle the hunt on or off without a Claude turn (debug)' })
     const stored = (await $.store.get(SAVE_KEY)) as Game | undefined
-    const open = await $.store.get(DEBUG_KEY)
-    if (typeof open === 'boolean') await update($, debugOpen, () => open)
-    const showBoxes = await $.store.get(BOXES_KEY)
-    if (typeof showBoxes === 'boolean') await update($, boxesOpen, () => showBoxes)
     const language = await detectLang($)
     await update($, lang, () => language)
     const now = await $.clock.now()
@@ -192,8 +172,6 @@ export const register: Register = on => {
   on('ui.press', { plugin: 'hunt-8bit' }, async ($, e, next) => {
     const weapon = WEAPON_CHOICES.find(c => `weapon-${c}` === e.element)
     if (weapon !== undefined) await serial(() => pickWeapon($, weapon))
-    else if (e.element === 'debug') await toggleDebug($)
-    else if (e.element === 'boxes') await toggleBoxes($)
     else return next(e)
     return { element: e.element }
   })
@@ -218,13 +196,11 @@ export const register: Register = on => {
     const started = await read($, turnStartedAt)
     const w = await read($, world)
     const last = await read($, lastElapsedMs)
-    const isOpen = await read($, debugOpen)
-    const isBoxes = await read($, boxesOpen)
     const lg = await read($, lang)
     if (w === null) return <Text dimColor>Hunt is loading…</Text>
     const elapsed = started === null ? last : Math.max(0, w.now - started)
     const view = viewOf(w.game)
-    const source = huntSvg(p, view, fmt(elapsed), isOpen && isBoxes, lg)
+    const source = huntSvg(p, view, fmt(elapsed), false, lg)
     const g = w.game
     // pickable as soon as the turn ends, whether or not the hunter is back yet (engine.ts chooseWeapon)
     const canChoose = p !== 'hunting'
@@ -250,24 +226,6 @@ export const register: Register = on => {
             {g.weaponChoice === 'random' ? t(lg, 'randomSuffix') : ''}
             {t(lg, 'pickAfterTurn')}
           </Text>
-        )}
-        <Button
-          key="debug"
-          plain
-          onPress={() => toggleDebug($)}
-        >
-          {t(lg, isOpen ? 'debugOpen' : 'debugClosed')}
-        </Button>
-        {isOpen && (
-          <Box flexDirection="column">
-            <Button
-              key="boxes"
-              plain
-              onPress={() => toggleBoxes($)}
-            >
-              {t(lg, isBoxes ? 'boxesOn' : 'boxesOff')}
-            </Button>
-          </Box>
         )}
       </Box>
     )

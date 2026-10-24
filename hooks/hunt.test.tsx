@@ -281,7 +281,7 @@ test('the buttons come back the moment the turn ends; a pick on the way home is 
   await ui.unmount()
 })
 
-test('the pane shows no debug text, only the debug toggles', async ($, on) => {
+test('the pane shows the picture and the weapon buttons, and no debug controls or text', async ($, on) => {
   mock.clock(on)
   mock.store(on)
   speaks(on, '繁體中文')
@@ -291,7 +291,11 @@ test('the pane shows no debug text, only the debug toggles', async ($, on) => {
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.findAll({ type: 'Text' })).toHaveLength(0)
-  expect(await ui.find({ type: 'Button', text: /碰撞框/ })).toBeDefined()
+  const buttons = await ui.findAll({ type: 'Button' })
+  expect(buttons).toHaveLength(4)
+  expect(await ui.find({ type: 'Button', text: /除錯|碰撞框/ })).toBeUndefined()
+  // the collision overlay is not drawn
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toContain('class="bh"')
   await ui.unmount()
 })
 
@@ -307,9 +311,6 @@ test('the pane takes its own presses by key, so one click is one change', async 
   expect(saved().weapon).toBe('longsword')
   expect(await ui.press({ key: 'weapon-bow' })).toEqual({ element: 'weapon-bow' })
   expect(saved().weapon).toBe('bow')
-  // the debug toggle, too: closed now, its collision-box switch gone
-  expect(await ui.press({ key: 'debug' })).toEqual({ element: 'debug' })
-  expect(await ui.find({ type: 'Button', text: /碰撞框/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -391,7 +392,7 @@ test('where Claude speaks another language, the pane and the picture are in Engl
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Button', text: /● Great Sword/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /○ Random/ })).toBeDefined()
-  expect(await ui.find({ type: 'Button', text: /Hitboxes/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /Debug|Hitboxes/ })).toBeUndefined()
   const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
   expect(svg).toContain('Weapon: Great Sword</text>')
   expect(svg).toContain('>Camp</text>')

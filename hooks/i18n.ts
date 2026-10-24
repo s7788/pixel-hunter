@@ -20,11 +20,6 @@ const ZH = {
   weaponInHand: '武器 {weapon}',
   randomSuffix: '（隨機）',
   pickAfterTurn: '・回合結束後可換',
-  // debug toggles
-  debugOpen: '除錯 ▾',
-  debugClosed: '除錯 ▸',
-  boxesOn: '碰撞框 ■ 開',
-  boxesOff: '碰撞框 □ 關',
   // callouts over the fight
   retreat: '撤退',
   huntStart: '狩獵開始',
@@ -67,10 +62,6 @@ const EN: Readonly<Record<TextId, string>> = {
   weaponInHand: 'Weapon: {weapon}',
   randomSuffix: ' (random)',
   pickAfterTurn: ' · pick after the turn',
-  debugOpen: 'Debug ▾',
-  debugClosed: 'Debug ▸',
-  boxesOn: 'Hitboxes ■ on',
-  boxesOff: 'Hitboxes □ off',
   retreat: 'Retreat',
   huntStart: 'Hunt start!',
   huntResume: 'Hunt resumes',

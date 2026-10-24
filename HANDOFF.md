@@ -63,7 +63,7 @@
 - 走位：獵人選招後若碰不到就用 C03 跑近（`runStep`），碰得到就出招。兩者身體以 `MOVE_BOUNDS` 加 `BODY_GAP` 保持距離。
 - 存檔：`saveSchemaVersion = 2`，新增 `simTick`、`nextAttackSerial`、`attack`、`intent`、`lastOutcome`、`hits`（最多 30 筆）。舊存檔或熱重載前的舊 world 都經 `migrate()`：在途攻擊丟棄、回營、血量不變。
 - `register.tsx` 用一條 promise 佇列（`serial`）依序處理 tick、turn.start、turn.complete、`/hunt-demo`，避免撤退後還有舊 tick 扣血。
-- 除錯：pane 下方不再顯示狀態機、事件、命中列表等文字（`log` atom 仍會記錄，只是不畫）；測試改從存檔讀狀態（`hunt.test.tsx` 的 `memStore`）。「除錯 ▾」內只剩「碰撞框」開關（預設關，存在 `$.store`）。綠＝受擊框、紅＝有效攻擊框、灰虛線＝出招前的攻擊範圍、青十字＝腳底、青箭頭＝實際面向（獵人素材朝右、冰呪龍朝左）、白叉＝最近 8 tick 內的命中點（灰叉＝翻滾閃過）。命中點是攻擊框與受擊框重疊區的中心，存在 `hits[].x/y`。
+- 除錯：pane 下方不再顯示狀態機、事件、命中列表等文字（`log` atom 仍會記錄，只是不畫）；測試改從存檔讀狀態（`hunt.test.tsx` 的 `memStore`）。v0.6 起 pane 也沒有除錯開關了（舊存檔裡的 `debugOpen`／`boxesOpen` store 鍵不再讀取）；碰撞框只能由程式畫：`huntSvg(phase, view, clock, true)`。綠＝受擊框、紅＝有效攻擊框、灰虛線＝出招前的攻擊範圍、青十字＝腳底、青箭頭＝實際面向（獵人素材朝右、冰呪龍朝左）、白叉＝最近 8 tick 內的命中點（灰叉＝翻滾閃過）。命中點是攻擊框與受擊框重疊區的中心，存在 `hits[].x/y`。
 - 調框：改 `hooks/collision-data.ts` 的數字。座標是未鏡像素材、以腳底錨點為原點（x 向右、y 向上為負）。`hit.pose` 必須等於 `data.ts` 的 `active`（有測試把關）。
 
 40 場固定種子模擬（`combat.test.ts` 的 40 場測試會印出，以下為大劍、v0.5）：平均 5.40 分鐘；力竭率 22.5%；出招 3847、命中 3637；冰呪龍出招 1170、打中獵人 409、翻滾閃過 204；每 tick p95 < 1ms、最大 3ms。
@@ -82,7 +82,7 @@
 - 太刀（L01 待機、L02 縱斬連段、L03 袈裟斬、L05 氣刃大迴旋斬）與弓（B01 待機、B04 通常射擊、B05 快速射擊、B06 剛射）放在各自的群組 `ls`、`bow`（`hooks/gen/ls.ts`、`bow.ts`，各自 20 色調色盤），所以大劍與營地的影格一個像素都沒變。L01 只取 F1、F2，因為 F4 的腳比較低，會讓前三格浮起來。
 - 太刀板每格都畫了冰呪龍。排除方法：每格的右邊界設在冰呪龍最左側之前，刀光碰到牠的部分用 `blank` 塗掉，再加 `groundY`、`minIsland` 清掉虛線地面與碎片。被切到的刀光停在冰呪龍的輪廓前。弓板沒有魔物。
 - 選擇（`chooseWeapon`）：`weaponChoice` 是營地的選擇，`weapon` 是手上的武器。按鈕在回合一結束（`phase` 不是 `hunting`）就出現，不等計時器把獵人跑回營地。選固定武器時，只要獵人不在外面（`leaving`／`arriving`／`fight`）就立刻換上；在外面時（UI 只在回合結束後出現，這時獵人已在回營路上，實際上不會發生）就等回營（`toCamp`）或下次出營（`takeWeapon`），也就是原本規劃的 `pending_weapon`。「隨機」只在開新一場時抽，續打同一場不換。回合進行中，pane 的按鈕換成文字。按鈕留在圖片下方：Svg 是不能點的葉節點，圖片裡原本畫的武器框會被當成按鈕去點，所以改成左下角的純文字。
-- 按鈕：pane 的按鈕（武器、除錯、碰撞框）由 `ui.press` hook 依 key 處理，不靠 `onPress`。pane 每 tick 重畫，`onPress` 的 closure 只活在畫出它的那次繪製，點擊剛好落在重畫之後就會丟（實測要點 2～3 次）。`onPress` 留著，只是 Button 必填。
+- 按鈕：pane 的武器按鈕由 `ui.press` hook 依 key 處理，不靠 `onPress`。pane 每 tick 重畫，`onPress` 的 closure 只活在畫出它的那次繪製，點擊剛好落在重畫之後就會丟（實測要點 2～3 次）。`onPress` 留著，只是 Button 必填。
 - 武器自己的動作：`WEAPONS[w].moves` 覆寫 `idle`／`run`／`walk`／`roll`，營地裡也套用（`hunterMove`）。C01／C02／C03／C08 都畫著大劍，所以太刀用 L01（只取 F1、F2，F3/F4 腳比較低）、弓用 B01 當待機、走路、跑步；閃避用 L06 的 F1、F2、F2、F4（不取 F3 的反擊斬）與 B07。這兩種閃避是面向冰呪龍往後滑（`dodgeFacesFoe`），不像大劍翻滾時轉身背對；無敵姿勢與時間跟翻滾相同。受擊、倒地（C15／C17）看不到武器，仍共用。
 - 平衡：冰呪龍血量照舊用大劍校正。太刀與弓的傷害乘上 `damageScale(weapon)`：用同一個固定種子的模擬反覆跑 4 次求出，讓每 tick 的傷害等於大劍。不能只跑一次，因為傷害放大後冰呪龍更常硬直、倒地，打得更快。第一次拿到那把武器出營時校正，結果留在模組變數裡，熱重載後重算。
 - 存檔：`saveSchemaVersion = 3`。schema 2 的存檔補上大劍後照原狀繼續（不回營）；更舊的照舊遷移回營。

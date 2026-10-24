@@ -118,9 +118,6 @@ declare module 'claude-code' {
       lastElapsedMs: number
       world: HuntWorld | null
       log: HuntEvent[]
-      debugOpen: boolean
-      /** Draw the collision boxes over the scene (debug). */
-      boxesOpen: boolean
       /** The language the pane draws in, picked at session start. */
       lang: HuntLang
     }
