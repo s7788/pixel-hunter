@@ -283,3 +283,21 @@ test('the pane shows no debug text, only the debug toggles', async ($, on) => {
   expect(await ui.find({ type: 'Button', text: /碰撞框/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('the pane takes its own presses by key, so one click is one change', async ($, on) => {
+  mock.clock(on)
+  const saved = memStore(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.press({ key: 'weapon-longsword' })).toEqual({ element: 'weapon-longsword' })
+  expect(saved().weapon).toBe('longsword')
+  expect(await ui.press({ key: 'weapon-bow' })).toEqual({ element: 'weapon-bow' })
+  expect(saved().weapon).toBe('bow')
+  // the debug toggle, too: closed now, its collision-box switch gone
+  expect(await ui.press({ key: 'debug' })).toEqual({ element: 'debug' })
+  expect(await ui.find({ type: 'Button', text: /碰撞框/ })).toBeUndefined()
+  await ui.unmount()
+})

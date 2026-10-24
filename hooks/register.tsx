@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { HuntEvent, HuntPhase, HuntWorld } from '../types'
+import type { HuntEvent, HuntPhase, HuntWeaponChoice, HuntWorld } from '../types'
 import { TICK_MS, WEAPON_CHOICES, WEAPONS } from './data'
 import type { Game } from './engine'
 import { beginTurn, chooseWeapon, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
@@ -64,6 +64,23 @@ async function advance($: EngineInterface): Promise<void> {
     return { tick: w.tick + 1, now: n, game }
   })
   if (saved !== undefined) await save($, saved)
+}
+
+async function pickWeapon($: EngineInterface, choice: HuntWeaponChoice): Promise<void> {
+  await save($, await changeGame($, g => chooseWeapon(g, choice)))
+  await note($, `weapon ${choice}`)
+}
+
+async function toggleDebug($: EngineInterface): Promise<void> {
+  const next = !(await read($, debugOpen))
+  await update($, debugOpen, () => next)
+  await $.store.set(DEBUG_KEY, next)
+}
+
+async function toggleBoxes($: EngineInterface): Promise<void> {
+  const next = !(await read($, boxesOpen))
+  await update($, boxesOpen, () => next)
+  await $.store.set(BOXES_KEY, next)
 }
 
 async function startTurn($: EngineInterface, label: string): Promise<void> {
@@ -138,6 +155,20 @@ export const register: Register = on => {
     return { text: `Hunt demo: ${isHunting ? 'retreat' : 'hunting'}.` }
   })
 
+  /**
+   * The pane's buttons, answered here by key rather than by their onPress: the
+   * pane redraws every tick, and a closure lives only as long as the drawing
+   * that held it, so a click landing just after a redraw used to be lost.
+   */
+  on('ui.press', { plugin: 'hunt-8bit' }, async ($, e, next) => {
+    const weapon = WEAPON_CHOICES.find(c => `weapon-${c.id}` === e.element)
+    if (weapon !== undefined) await serial(() => pickWeapon($, weapon.id))
+    else if (e.element === 'debug') await toggleDebug($)
+    else if (e.element === 'boxes') await toggleBoxes($)
+    else return next(e)
+    return { element: e.element }
+  })
+
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
     await serial(() => startTurn($, `turn.start ${e.turnId.slice(0, 8)}`))
@@ -182,12 +213,7 @@ export const register: Register = on => {
                 key={`weapon-${c.id}`}
                 plain
                 dimColor={c.id !== g.weaponChoice}
-                onPress={() =>
-                  serial(async () => {
-                    await save($, await changeGame($, x => chooseWeapon(x, c.id)))
-                    await note($, `weapon ${c.id}`)
-                  })
-                }
+                onPress={() => serial(() => pickWeapon($, c.id))}
               >
                 {`${c.id === g.weaponChoice ? '●' : '○'} ${c.label}  `}
               </Button>
@@ -202,11 +228,7 @@ export const register: Register = on => {
         <Button
           key="debug"
           plain
-          onPress={async () => {
-            const next = !(await read($, debugOpen))
-            await update($, debugOpen, () => next)
-            await $.store.set(DEBUG_KEY, next)
-          }}
+          onPress={() => toggleDebug($)}
         >
           {isOpen ? '除錯 ▾' : '除錯 ▸'}
         </Button>
@@ -215,11 +237,7 @@ export const register: Register = on => {
             <Button
               key="boxes"
               plain
-              onPress={async () => {
-                const next = !(await read($, boxesOpen))
-                await update($, boxesOpen, () => next)
-                await $.store.set(BOXES_KEY, next)
-              }}
+              onPress={() => toggleBoxes($)}
             >
               {isBoxes ? '碰撞框 ■ 開' : '碰撞框 □ 關'}
             </Button>
