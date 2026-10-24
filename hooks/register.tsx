@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { HuntEvent, HuntPhase, HuntWeaponChoice, HuntWorld } from '../types'
-import { TICK_MS, WEAPON_CHOICES, WEAPONS } from './data'
+import type { HuntEvent, HuntLang, HuntPhase, HuntWeaponChoice, HuntWorld } from '../types'
+import { TICK_MS, WEAPON_CHOICES } from './data'
 import type { Game } from './engine'
 import { beginTurn, chooseWeapon, endTurn, migrate, newGame, restore, step, viewOf } from './engine'
+import { pickLang, t } from './i18n'
 import { HUNT_SIZE, huntSvg } from './svg'
 
 const PANE = 'hunt-8bit'
@@ -22,6 +23,7 @@ const world = atom({ plugin: 'hunt-8bit', key: 'world' } as const, null as HuntW
 const log = atom({ plugin: 'hunt-8bit', key: 'log' } as const, [] as HuntEvent[])
 const debugOpen = atom({ plugin: 'hunt-8bit', key: 'debugOpen' } as const, true)
 const boxesOpen = atom({ plugin: 'hunt-8bit', key: 'boxesOpen' } as const, false)
+const lang = atom({ plugin: 'hunt-8bit', key: 'lang' } as const, 'en' as HuntLang)
 
 /** working_elapsed: MM:SS, HH:MM:SS past an hour. */
 const fmt = (ms: number): string => {
@@ -67,6 +69,28 @@ async function advance($: EngineInterface): Promise<void> {
   if (saved !== undefined) await save($, saved)
   // back at camp after a turn: the HUD reads 待機 again, not 撤退
   if (p === 'retreat' && isHome) await update($, phase, () => 'camp')
+}
+
+/**
+ * Traditional Chinese where Claude speaks it, English for everyone else:
+ * Claude's `language` setting first, then the locale variables, then the
+ * system locale. A source that cannot be read is passed over.
+ */
+async function detectLang($: EngineInterface): Promise<HuntLang> {
+  const tryRead = async (read: () => Promise<unknown>): Promise<unknown> => {
+    try {
+      return await read()
+    } catch {
+      return undefined
+    }
+  }
+  return pickLang([
+    await tryRead(() => $.settings.read({ key: 'language' })),
+    await tryRead(() => $.env.get('LC_ALL')),
+    await tryRead(() => $.env.get('LC_MESSAGES')),
+    await tryRead(() => $.env.get('LANG')),
+    Intl.DateTimeFormat().resolvedOptions().locale,
+  ])
 }
 
 async function pickWeapon($: EngineInterface, choice: HuntWeaponChoice): Promise<void> {
@@ -127,6 +151,8 @@ export const register: Register = on => {
     if (typeof open === 'boolean') await update($, debugOpen, () => open)
     const showBoxes = await $.store.get(BOXES_KEY)
     if (typeof showBoxes === 'boolean') await update($, boxesOpen, () => showBoxes)
+    const language = await detectLang($)
+    await update($, lang, () => language)
     const now = await $.clock.now()
     // a hot reload keeps the session's world (migrated if it predates collision); a new session restores the save
     await update($, world, w =>
@@ -164,8 +190,8 @@ export const register: Register = on => {
    * that held it, so a click landing just after a redraw used to be lost.
    */
   on('ui.press', { plugin: 'hunt-8bit' }, async ($, e, next) => {
-    const weapon = WEAPON_CHOICES.find(c => `weapon-${c.id}` === e.element)
-    if (weapon !== undefined) await serial(() => pickWeapon($, weapon.id))
+    const weapon = WEAPON_CHOICES.find(c => `weapon-${c}` === e.element)
+    if (weapon !== undefined) await serial(() => pickWeapon($, weapon))
     else if (e.element === 'debug') await toggleDebug($)
     else if (e.element === 'boxes') await toggleBoxes($)
     else return next(e)
@@ -194,10 +220,11 @@ export const register: Register = on => {
     const last = await read($, lastElapsedMs)
     const isOpen = await read($, debugOpen)
     const isBoxes = await read($, boxesOpen)
+    const lg = await read($, lang)
     if (w === null) return <Text dimColor>Hunt is loading…</Text>
     const elapsed = started === null ? last : Math.max(0, w.now - started)
     const view = viewOf(w.game)
-    const source = huntSvg(p, view, fmt(elapsed), isOpen && isBoxes)
+    const source = huntSvg(p, view, fmt(elapsed), isOpen && isBoxes, lg)
     const g = w.game
     // pickable as soon as the turn ends, whether or not the hunter is back yet (engine.ts chooseWeapon)
     const canChoose = p !== 'hunting'
@@ -212,20 +239,16 @@ export const register: Register = on => {
         {canChoose ? (
           <Box flexDirection="row">
             {WEAPON_CHOICES.map(c => (
-              <Button
-                key={`weapon-${c.id}`}
-                plain
-                dimColor={c.id !== g.weaponChoice}
-                onPress={() => serial(() => pickWeapon($, c.id))}
-              >
-                {`${c.id === g.weaponChoice ? '●' : '○'} ${c.label}  `}
+              <Button key={`weapon-${c}`} plain dimColor={c !== g.weaponChoice} onPress={() => serial(() => pickWeapon($, c))}>
+                {`${c === g.weaponChoice ? '●' : '○'} ${t(lg, c)}  `}
               </Button>
             ))}
           </Box>
         ) : (
           <Text dimColor>
-            武器 {WEAPONS[g.weapon].label}
-            {g.weaponChoice === 'random' ? '（隨機）' : ''}・回合結束後可換
+            {t(lg, 'weaponInHand', { weapon: t(lg, g.weapon) })}
+            {g.weaponChoice === 'random' ? t(lg, 'randomSuffix') : ''}
+            {t(lg, 'pickAfterTurn')}
           </Text>
         )}
         <Button
@@ -233,7 +256,7 @@ export const register: Register = on => {
           plain
           onPress={() => toggleDebug($)}
         >
-          {isOpen ? '除錯 ▾' : '除錯 ▸'}
+          {t(lg, isOpen ? 'debugOpen' : 'debugClosed')}
         </Button>
         {isOpen && (
           <Box flexDirection="column">
@@ -242,7 +265,7 @@ export const register: Register = on => {
               plain
               onPress={() => toggleBoxes($)}
             >
-              {isBoxes ? '碰撞框 ■ 開' : '碰撞框 □ 關'}
+              {t(lg, isBoxes ? 'boxesOn' : 'boxesOff')}
             </Button>
           </Box>
         )}

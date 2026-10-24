@@ -22,6 +22,9 @@ export type HunterMoveId =
   | 'walk'
   | 'roast'
   | 'eat'
+/** The pane's language: Traditional Chinese, or English for everyone else (hooks/i18n.ts pickLang). */
+export type HuntLang = 'zh-TW' | 'en'
+
 /** The weapon in hand; `random` draws one for each new hunt. */
 export type HuntWeapon = 'greatsword' | 'longsword' | 'bow'
 export type HuntWeaponChoice = HuntWeapon | 'random'
@@ -118,6 +121,8 @@ declare module 'claude-code' {
       debugOpen: boolean
       /** Draw the collision boxes over the scene (debug). */
       boxesOpen: boolean
+      /** The language the pane draws in, picked at session start. */
+      lang: HuntLang
     }
   }
 }

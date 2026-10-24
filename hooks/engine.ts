@@ -12,6 +12,7 @@ import type { Placement } from './collision'
 import { contactPart, hitboxes, hurtboxes, reaches } from './collision'
 import { MOVE_BOUNDS } from './collision-data'
 import type { Move } from './data'
+import type { TextId } from './i18n'
 import { BODY_GAP, CAMP, CAMP_SCENE, HUNTER, TICK_MS, VELKHANA, WEAPONS } from './data'
 import type { ActionId, SceneId } from './sprites'
 import { SCENES } from './sprites'
@@ -100,8 +101,9 @@ function pick<K extends string>(g: Game, weights: readonly (readonly [K, number]
   return weights[weights.length - 1]![0]
 }
 
-function say(g: Game, text: string): void {
-  g.label = text
+/** A callout over the fight, by text id (hooks/i18n.ts); the drawing picks the words. */
+function say(g: Game, id: TextId): void {
+  g.label = id
   g.labelT = 0
 }
 
@@ -276,7 +278,7 @@ export function endTurn(game: Game): Game {
     g.hunter.rollIn = -1
     hunterDo(g, 'run')
     if (g.monster.move !== 'topple') monsterDo(g, 'idle')
-    say(g, '撤退')
+    say(g, 'retreat')
   } else if (g.mode === 'leaving') {
     toCamp(g)
   }
@@ -387,7 +389,7 @@ export function step(game: Game, working: boolean): Game {
         }
         g.hunt!.isFresh = false
         setMode(g, 'fight')
-        say(g, g.hunt!.monsterHp === g.hunt!.monsterHpMax ? '狩獵開始' : '繼續狩獵')
+        say(g, g.hunt!.monsterHp === g.hunt!.monsterHpMax ? 'huntStart' : 'huntResume')
       }
       break
     }
@@ -415,7 +417,7 @@ export function step(game: Game, working: boolean): Game {
       if (g.modeT >= SLAIN_HOLD + RUN_TICKS) {
         g.hunt = null
         toCamp(g)
-        say(g, '討伐完成')
+        say(g, 'huntDone')
       }
       break
   }
@@ -519,7 +521,7 @@ function settle(g: Game): boolean {
     hunterDo(g, hunterFell ? 'down' : 'idle')
     h.rollIn = -1
     h.intent = null
-    say(g, hunterFell ? '雙方倒下・討伐完成' : '討伐完成！')
+    say(g, hunterFell ? 'mutualKo' : 'slain')
     return true
   }
   if (hunterFell) {
@@ -529,7 +531,7 @@ function settle(g: Game): boolean {
     h.rollIn = -1
     h.intent = null
     if (m.move !== 'topple') monsterDo(g, 'idle')
-    say(g, '力竭…回營')
+    say(g, 'carted')
     return true
   }
   if (toHunter > 0) {
@@ -537,9 +539,9 @@ function settle(g: Game): boolean {
     h.facing = 1
     h.rollIn = -1
     h.intent = null
-    say(g, monsterAttack === 'iceBeam' ? '被冰吐息擊中' : '被尾刺擊中')
+    say(g, monsterAttack === 'iceBeam' ? 'hitByBeam' : 'hitByStab')
   } else if (found.some(c => c.outcome === 'evaded')) {
-    say(g, '翻滾閃避')
+    say(g, 'dodged')
   }
   if (toMonster > 0) {
     // never toppled again while down or getting up; the count waits for the next hit
@@ -547,11 +549,11 @@ function settle(g: Game): boolean {
       hunt.topple = 0
       hunt.stagger = 0
       monsterDo(g, 'topple')
-      say(g, '冰呪龍倒地')
+      say(g, 'toppled')
     } else if (hunt.stagger >= VELKHANA.flinchEvery && m.move !== 'topple' && m.move !== 'getup') {
       hunt.stagger = 0
       monsterDo(g, 'flinch')
-      say(g, '冰呪龍硬直')
+      say(g, 'flinched')
     }
   }
   return false
@@ -663,7 +665,8 @@ function attack(g: Game, move: HunterMove): void {
   g.hunter.facing = 1
   g.hunter.intent = null
   hunterDo(g, move)
-  say(g, hunterMove(g, move).label ?? '')
+  // every attack move has its callout in hooks/i18n.ts (a test holds both tables to it)
+  say(g, move as HunterMove & TextId)
 }
 
 /** One running step toward the monster; swing when in reach, give up when blocked. */
@@ -692,7 +695,7 @@ function runIn(g: Game): void {
 function monsterDecide(g: Game): void {
   const m = g.monster
   const [hAction, hPose] = hunterPose(g)
-  const options: [MonsterMove, number][] = []
+  const options: ['tailStab' | 'iceBeam', number][] = []
   for (const move of ['tailStab', 'iceBeam'] as const) {
     if (reaches(monsterMove(move).action, monsterAt(g), hAction, hPose, hunterAt(g))) options.push([move, VELKHANA.moves[move].weight])
   }
@@ -703,7 +706,7 @@ function monsterDecide(g: Game): void {
   }
   const move = pick(g, options)
   monsterDo(g, move)
-  say(g, move === 'iceBeam' ? '冰吐息' : '尾刺')
+  say(g, move)
 }
 
 /**

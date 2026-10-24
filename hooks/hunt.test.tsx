@@ -1,9 +1,10 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { HUNTER, TICK_MS, VELKHANA } from './data'
+import { HUNTER, TICK_MS, VELKHANA, WEAPON_CHOICES } from './data'
 import type { Game } from './engine'
 import { beginTurn, chooseWeapon, endTurn, newGame, restore, step, viewOf } from './engine'
+import { pickLang, t } from './i18n'
 import { huntSvg } from './svg'
 import { ACTIONS } from './sprites'
 import type { ActionId } from './sprites'
@@ -21,6 +22,11 @@ const PANE = {
     view: {},
   },
 } as const
+
+/** Claude's `language` setting as the mod reads it at session start. */
+function speaks(on: On, language: string): void {
+  on('settings.read', () => ({ value: { language } }))
+}
 
 /**
  * `mock.store` with a window on it: an in-memory store whose `save` (written
@@ -189,6 +195,7 @@ test('a new session picks the stored hunt back up at camp', async ($, on) => {
 test('camp shows the weapon buttons; a press takes the weapon up; a hunt locks them', async ($, on) => {
   mock.clock(on)
   const saved = memStore(on)
+  speaks(on, '繁體中文')
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -245,10 +252,11 @@ test('a press in camp after a real turn, with the clock ticking, changes the wea
 
 test('the picture names the weapon in hand as text, with no boxes that look like buttons', () => {
   const picked = viewOf(chooseWeapon(newGame(3), 'longsword'))
-  const svg = huntSvg('camp', picked, '00:00')
+  const svg = huntSvg('camp', picked, '00:00', false, 'zh-TW')
   expect(svg).toContain('武器 太刀</text>')
   expect(svg).not.toContain('大劍</text>')
-  expect(huntSvg('camp', viewOf(chooseWeapon(newGame(3), 'random')), '00:00')).toContain('（隨機）</text>')
+  expect(huntSvg('camp', viewOf(chooseWeapon(newGame(3), 'random')), '00:00', false, 'zh-TW')).toContain('（隨機）</text>')
+  expect(huntSvg('camp', picked, '00:00', false, 'en')).toContain('Weapon: Long Sword</text>')
 })
 
 test('the buttons come back the moment the turn ends; a pick on the way home is in hand at once', async ($, on) => {
@@ -276,6 +284,7 @@ test('the buttons come back the moment the turn ends; a pick on the way home is 
 test('the pane shows no debug text, only the debug toggles', async ($, on) => {
   mock.clock(on)
   mock.store(on)
+  speaks(on, '繁體中文')
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -307,6 +316,7 @@ test('the pane takes its own presses by key, so one click is one change', async 
 test('an interrupted turn runs the hunter home and keeps the hunt, as an answer does', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
   const saved = memStore(on)
+  speaks(on, '繁體中文')
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -359,4 +369,51 @@ test('every scene, monster frame and hunter frame together fit the Svg source li
     }
   }
   expect(largest).toBeLessThan(131072)
+})
+
+test('Traditional Chinese draws Chinese; every other language, Simplified Chinese included, draws English', () => {
+  for (const zh of ['繁體中文', '正體中文', 'Traditional Chinese', 'zh-TW', 'zh_TW.UTF-8', 'zh-Hant-TW', 'zh-HK']) expect(pickLang([zh])).toBe('zh-TW')
+  for (const en of ['English', 'japanese', '日本語', '简体中文', 'Simplified Chinese', 'zh-CN', 'zh_CN.UTF-8', '中文', 'C.UTF-8']) expect(pickLang([en])).toBe('en')
+  // the first source that says anything wins: Claude's setting over the system locale
+  expect(pickLang([undefined, '', 'zh-TW'])).toBe('zh-TW')
+  expect(pickLang(['English', undefined, undefined, undefined, 'zh-TW'])).toBe('en')
+  expect(pickLang([])).toBe('en')
+})
+
+test('where Claude speaks another language, the pane and the picture are in English', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  speaks(on, 'japanese')
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Button', text: /● Great Sword/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /○ Random/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /Hitboxes/ })).toBeDefined()
+  const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
+  expect(svg).toContain('Weapon: Great Sword</text>')
+  expect(svg).toContain('>Camp</text>')
+  expect(svg).not.toMatch(/[\u4e00-\u9fff]/)
+  await ui.unmount()
+})
+
+test('every callout and attack has its words in both languages; a callout saved as text shows as it is', () => {
+  const ids = [
+    ...WEAPON_CHOICES,
+    ...Object.entries(HUNTER.moves).filter(([, m]) => (m as { active?: number }).active !== undefined).map(([id]) => id),
+    ...Object.entries(VELKHANA.moves).filter(([, m]) => (m as { active?: number }).active !== undefined).map(([id]) => id),
+  ]
+  for (const id of ids) {
+    expect(t('zh-TW', id)).not.toBe(id)
+    expect(t('en', id)).not.toBe(id)
+  }
+  // a long hunt in English draws no Chinese anywhere, callouts included
+  let g = beginTurn(chooseWeapon(newGame(9), 'longsword'))
+  for (let i = 0; i < 2000; i += 1) {
+    g = step(g, true)
+    if (viewOf(g).label !== '') expect(huntSvg('hunting', viewOf(g), '00:00', false, 'en')).not.toMatch(/[\u4e00-\u9fff]/)
+  }
+  expect(t('en', '撤退')).toBe('撤退')
 })

@@ -88,6 +88,13 @@
 - 存檔：`saveSchemaVersion = 3`。schema 2 的存檔補上大劍後照原狀繼續（不回營）；更舊的照舊遷移回營。
 - 40 場模擬（`combat.test.ts` 會印出，v0.5）：大劍 5.40 分鐘、力竭 22.5%；太刀 5.12 分鐘、25%；弓 5.89 分鐘、57.5%。這個統計對參數很敏感、雜訊約 ±15%，三把沒有個別調。
 
+## 語系（v0.6）
+
+- 文字全部在 `hooks/i18n.ts`（繁中 `ZH`、英文 `EN`）。引擎只存 id：`g.label` 是畫面提示的 id，招式提示用招式 id；`svg.ts` 與 pane 畫的時候才用 `t(lang, id)` 查字。舊存檔裡存成中文的提示查不到 id，就照原樣顯示。
+- 語言在 `session.start` 判斷一次，存在 `$.state` 的 `lang`（`detectLang`）。順序：Claude 的 `language` 設定（`$.settings.read({ key: 'language' })`）→ `LC_ALL`／`LC_MESSAGES`／`LANG` → `Intl` 的系統地區；取第一個有值的來源。繁體中文（繁體中文、Traditional Chinese、zh-TW、zh_Hant、zh-HK…）畫中文，其他一律英文，簡體中文也是英文。讀不到的來源略過。
+- 冰呪龍的英文名用官方英文名 Velkhana。改了 `language` 設定要重載 mod 或開新 session 才會換語言。
+- 測試裡畫面的語言靠 `speaks(on, language)` 指定，不要依賴跑測試那台電腦的地區。
+
 ## v0.5 修正的既有 bug
 
 - 討伐演出（`slain`，約 5.75 秒）期間回答又開始下一回合時，`slain` 結束會把 `isResting` 設回 true，獵人整個回合待在營地。改在擊倒的那一刻設 `isResting`。

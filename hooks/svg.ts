@@ -1,8 +1,10 @@
-import type { HuntPhase } from '../types'
-import { CAMP, HUNTER, VELKHANA, WEAPONS } from './data'
+import type { HuntLang, HuntPhase } from '../types'
+import { CAMP, HUNTER } from './data'
 import { attackReach, hitboxes, hurtboxes } from './collision'
 import type { Aabb, Placement } from './collision'
 import type { ActorView, View } from './engine'
+import type { TextId } from './i18n'
+import { t } from './i18n'
 import type { RleRow, SceneId } from './sprites'
 import { ACTIONS, SCENES } from './sprites'
 
@@ -13,10 +15,10 @@ const SCENE_SCALE = 3
 const W = 128 * SCENE_SCALE
 const H = 72 * SCENE_SCALE
 
-const PHASE_LABEL: Record<HuntPhase, string> = {
-  camp: '待機',
-  hunting: '狩獵中',
-  retreat: '撤退',
+const PHASE_TEXT: Record<HuntPhase, TextId> = {
+  camp: 'phaseCamp',
+  hunting: 'phaseHunting',
+  retreat: 'phaseRetreat',
 }
 
 /**
@@ -145,21 +147,21 @@ function bar(x: number, y: number, segs: number, filled: number, on: string, off
  * The weapon in hand, as plain text: drawn boxes here read as buttons, but the
  * picture takes no clicks (the camp's buttons under it pick).
  */
-const weapon = (view: View): string =>
-  `<text x="8" y="${H - 11}" class="w">武器 ${WEAPONS[view.weapon].label}${view.isRandomWeapon ? '（隨機）' : ''}</text>`
+const weapon = (view: View, lang: HuntLang): string =>
+  `<text x="8" y="${H - 11}" class="w">${t(lang, 'weaponInHand', { weapon: t(lang, view.weapon) })}${view.isRandomWeapon ? t(lang, 'randomSuffix') : ''}</text>`
 
-function hud(phase: HuntPhase, view: View, clock: string): string {
+function hud(phase: HuntPhase, view: View, clock: string, lang: HuntLang): string {
   const low = view.hp <= HUNTER.hpMax / 4
   return (
     `<text x="8" y="17" class="t">HP</text>${bar(34, 9, HUNTER.hpMax, view.hp, low ? '#e8402a' : '#2ee05a', '#2a3550')}` +
     `<text x="8" y="33" class="t">ST</text>${bar(34, 25, HUNTER.staminaMax, view.stamina, '#ffd21f', '#2a3550')}` +
     `<rect x="284" y="6" width="94" height="58" fill="#10183a" stroke="#f0a020" stroke-width="2"/>` +
-    `<text x="331" y="21" class="n">${view.monster === null ? '—' : VELKHANA.name}</text>` +
-    `<text x="331" y="31" class="p">${view.monster === null ? '' : VELKHANA.species}</text>` +
+    `<text x="331" y="21" class="n">${view.monster === null ? '—' : t(lang, 'velkhana')}</text>` +
+    `<text x="331" y="31" class="p">${view.monster === null ? '' : t(lang, 'elderDragon')}</text>` +
     `<text x="331" y="45" class="c">${clock}</text>` +
-    `<text x="331" y="59" class="s">${PHASE_LABEL[phase]}</text>` +
-    (view.label === '' ? '' : `<text x="192" y="${H - 34}" class="a">${view.label}</text>`) +
-    weapon(view)
+    `<text x="331" y="59" class="s">${t(lang, PHASE_TEXT[phase])}</text>` +
+    (view.label === '' ? '' : `<text x="192" y="${H - 34}" class="a">${t(lang, view.label)}</text>`) +
+    weapon(view, lang)
   )
 }
 
@@ -201,8 +203,8 @@ const CSS =
   `.bv{stroke:#9aa3b5}` +
   `.a{font:bold 13px sans-serif;fill:#f4f8ff;text-anchor:middle;paint-order:stroke;stroke:#10183a;stroke-width:3px}`
 
-/** The picture at one tick; `showBoxes` draws the collision overlay. */
-export function huntSvg(phase: HuntPhase, view: View, clock: string, showBoxes = false): string {
+/** The picture at one tick, in `lang`; `showBoxes` draws the collision overlay. */
+export function huntSvg(phase: HuntPhase, view: View, clock: string, showBoxes = false, lang: HuntLang = 'en'): string {
   const ground = SCENES[view.scene].ground * SCENE_SCALE
   let actors =
     (view.camp === null ? '' : campProps(view.camp)) + (view.monster === null ? '' : actor(view.monster, ground)) + actor(view.hunter, ground)
@@ -210,7 +212,7 @@ export function huntSvg(phase: HuntPhase, view: View, clock: string, showBoxes =
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +
     `<style>${CSS}</style><g fill="none" stroke-width="1">${scene(view.scene)}${actors}</g>` +
-    `${hud(phase, view, clock)}</svg>`
+    `${hud(phase, view, clock, lang)}</svg>`
   )
 }
 

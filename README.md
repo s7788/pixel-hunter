@@ -26,15 +26,17 @@ claude plugin install hunt-8bit --marketplace s7788/hunt-8bit
 
 In the desktop app, click **+** next to the prompt box, then **Plugins** → **Add marketplace** with `s7788/hunt-8bit`, then **Add plugin**.
 
-Needs Claude Code 2.1.275 or later (tested on 2.1.304 in the desktop app). The picture draws wherever a pane can show one: the desktop app, VS Code and mobile. The terminal has no pane picture yet; there the pane shows a line of text. The in-game text is in Chinese.
+Needs Claude Code 2.1.275 or later (tested on 2.1.304 in the desktop app). The picture draws wherever a pane can show one: the desktop app, VS Code and mobile. The terminal has no pane picture yet; there the pane shows a line of text.
+
+The game speaks your language: Traditional Chinese where Claude does, English everywhere else. It follows Claude's `language` setting, then your locale.
 
 ## How it plays
 
 - **Your turn is the hunt.** A prompt sends the hunter out; Claude's answer, or you interrupting it, brings the hunter home. Subagents don't count, only the main turn.
 - **The fight runs itself.** The hunter reads the monster's moves: it dodges what would hit it, backs off, runs in, and only swings when the blow would land. The monster only uses attacks that can reach.
-- **Damage is real contact.** Every attack has hit boxes; a blow counts only when they touch the target's body. Open **除錯 ▸** (debug) and turn on **碰撞框** (collision boxes) to watch it.
+- **Damage is real contact.** Every attack has hit boxes; a blow counts only when they touch the target's body. Open **Debug ▸** and turn on **Hitboxes** to watch it.
 - **Progress is kept.** The monster's HP carries over between turns and sessions. Bring it down for a kill; run out of HP and the hunter is carted back to camp, with the monster still wounded.
-- **Pick your weapon at camp.** Under the picture, between turns: **大劍** (great sword), **太刀** (long sword), **弓** (bow) or **隨機** (random, a new draw for each new hunt). Each weapon has its own stance, run, dodge and moves, and they're balanced to hunt at about the same pace.
+- **Pick your weapon at camp.** Under the picture, between turns: **Great Sword**, **Long Sword**, **Bow** or **Random** (a new draw for each new hunt). Each weapon has its own stance, run, dodge and moves, and they're balanced to hunt at about the same pace.
 
 | | Moves | Character |
 |---|---|---|

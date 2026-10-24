@@ -4,7 +4,7 @@
 
 Claude Code 的側邊 pane。你送出提示，獵人就出營去打冰呪龍；Claude 回答完，獵人跑回營地烤肉，等你下一個提示。一場狩獵大約是 Claude 工作五分鐘的時間；沒打完的魔物會跨回合、跨 session 等你。
 
-![獵人在營地烤肉，接著分別拿大劍、太刀、弓狩獵冰呪龍](docs/media/demo.gif)
+![獵人在營地烤肉，接著分別拿大劍、太刀、弓狩獵冰呪龍](docs/media/demo.zh-TW.gif)
 
 [English](README.md)
 
@@ -28,6 +28,8 @@ claude plugin install hunt-8bit --marketplace s7788/hunt-8bit
 
 需要 Claude Code 2.1.275 以上（在桌面版 2.1.304 實測）。能顯示 pane 圖片的地方都會畫出像素畫面：桌面版、VS Code 與手機；終端機目前沒有 pane 畫面，只顯示一行文字。
 
+遊戲文字跟著 Claude 的語言：Claude 用繁體中文就顯示中文，其他語言（包括簡體中文）一律顯示英文。先看 Claude 的 `language` 設定，沒設再看系統地區。
+
 ## 玩法
 
 - **你的回合就是狩獵。** 送出提示，獵人出營；Claude 回答完或你中斷它，獵人回營。只看主回合，子代理不算。
@@ -42,7 +44,7 @@ claude plugin install hunt-8bit --marketplace s7788/hunt-8bit
 | 太刀 | 縱斬連段、袈裟斬；硬直或倒地時氣刃大迴旋斬 | 出手快，往後滑步閃避 |
 | 弓 | 通常射擊、快速射擊；硬直或倒地時剛射 | 能從遠處出手 |
 
-![弓](docs/media/bow.png)
+![弓](docs/media/bow.zh-TW.png)
 
 ## 指令
 

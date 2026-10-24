@@ -48,11 +48,13 @@ PYTHONUTF8=1 python -I tools/extract_sprites.py <hunt_8bit_reference 資料夾>
 README 的 `docs/media/demo.gif` 由遊戲自己的 SVG 產生，不是另外畫的：
 
 ```bash
-npx -y tsx tools/demo_frames.mts demo-frames
+npx -y tsx tools/demo_frames.mts demo-frames en
 ```
 
 ```bash
 PYTHONUTF8=1 python -I tools/svg_to_gif.py demo-frames docs/media/demo.gif --scale 2
 ```
+
+繁中版：`demo_frames.mts` 的語言參數改成 `zh-TW`，輸出 `docs/media/demo.zh-TW.gif`。
 
 `svg_to_gif.py` 只畫遊戲用到的 SVG 子集（一像素高的橫線、矩形、文字、平移與鏡像），需要 Pillow 與 Windows 的微軟正黑體、Consolas。
