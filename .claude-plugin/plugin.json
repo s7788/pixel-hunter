@@ -1,1 +1,20 @@
-{ "name": "hunt-8bit", "version": "0.3.2", "description": "8-bit hunting companion pane that follows Claude's turns", "types": "./types/index.d.ts" }
+{
+  "name": "hunt-8bit",
+  "version": "0.5.0",
+  "description": "An 8-bit hunter in a side pane that fights a monster while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network.",
+  "author": {
+    "name": "s7788"
+  },
+  "homepage": "https://github.com/s7788/hunt-8bit",
+  "repository": "https://github.com/s7788/hunt-8bit",
+  "keywords": [
+    "game",
+    "pixel-art",
+    "8-bit",
+    "pane",
+    "companion",
+    "idle",
+    "fun"
+  ],
+  "types": "./types/index.d.ts"
+}

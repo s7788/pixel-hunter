@@ -1,6 +1,6 @@
 # hunt-8bit 交接（給接手的 Claude）
 
-這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `README.md`，再讀本檔。它已通過 `tsc`、43 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）與武器版（v0.4，見下方「武器」）的 Desktop 實機驗收尚未完成。
+這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `docs/DEVELOPMENT.md`（設計範圍與素材管線），再讀本檔；`README.md` 是給使用者的介紹。它已通過 `tsc`、43 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）與武器版（v0.4，見下方「武器」）的 Desktop 實機驗收尚未完成。
 
 ## 如何載入
 
@@ -113,4 +113,4 @@
 
 - `session.start` 在熱重載後會再跑一次；world 狀態放在 `$.state`，重載不會遺失，模組內變數會重置。
 - 測試裡 `mock.clock`、`mock.store`、`ui.open`、`session.start` 都要自己提供實作，否則 hook 會被略過。
-- 這個資料夾原本不在任何 git repo；若要版控請另開新資料夾，不要放進別的專案 repo。
+- repo 在 https://github.com/s7788/hunt-8bit；`.claude-plugin/marketplace.json` 讓它本身就是一個 marketplace（`/plugin install hunt-8bit --marketplace s7788/hunt-8bit`）。
