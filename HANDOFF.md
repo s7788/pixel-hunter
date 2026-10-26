@@ -1,4 +1,4 @@
-# hunt-8bit 交接（給接手的 Claude）
+# pixel-hunter 交接（給接手的 Claude）
 
 這是一個 Claude Code mod（函式 hooks 外掛）。先讀 `docs/DEVELOPMENT.md`（設計範圍與素材管線），再讀本檔；`README.md` 是給使用者的介紹。它已通過 `tsc`、147 個測試與 `claude plugin validate`。第一版由原作者在 Claude Desktop 實機確認可用；碰撞版（v0.2，見下方「碰撞機制」）的 Desktop 實機驗收尚未完成。
 
@@ -49,7 +49,7 @@
 - `hooks/collision.test.ts`、`hooks/combat.test.ts`：框資料、幾何、規格驗收案例與 40 場模擬統計。
 - `hooks/<魔物>.test.ts`（jagras、tobi、anjanath、barioth、nargacuga、tigrex、zinogre、ruiner_nergigante）：各新增魔物的專屬驗收（M01–M08）與 20 場模擬統計；`hooks/simulate.ts` 是它們共用的模擬工具。
 
-## 碰撞機制（v0.2，依 `hunt-8bit-collision-spec-v1.0.md`）
+## 碰撞機制（v0.2，依 `pixel-hunter-collision-spec-v1.0.md`）
 
 與規格不同、經使用者確認的決定：
 
@@ -83,7 +83,7 @@
 
 ## 魔物註冊與大凶豺龍（v0.4）
 
-依參考包 `hunt-8bit-all-monsters-reference-v1.1` 的 `specs/hunt-8bit-monster-expansion-spec-v1.0.md`（第 2、3、4.1、6、7 節）。
+依參考包 `pixel-hunter-all-monsters-reference-v1.1` 的 `specs/pixel-hunter-monster-expansion-spec-v1.0.md`（第 2、3、4.1、6、7 節）。
 
 - 結構：`hooks/monsters/types.ts`（`MonsterDef`、`MonsterMove`、`Mechanic`）、`registry.ts`（`MONSTERS`、`enabledMonsters`）、`velkhana.ts`、`great_jagras.ts`。引擎只讀選定的定義；專屬規則寫在 `mechanic`（`decide`／`damaged`／`idleMove` 等），引擎把 `act`／`say` 借給它，避免互相 import。
 - 冰呪龍回歸：搬進註冊表後，40 場模擬與搬移前逐項相同（平均 5.12 分、力竭率 37.5%、出招 3566、命中 3336、冰呪龍出招 1147、打中 510、閃過 331、翻滾 384）。
@@ -287,4 +287,4 @@
 
 - `session.start` 在熱重載後會再跑一次；world 狀態放在 `$.state`，重載不會遺失，模組內變數會重置。
 - 測試裡 `mock.clock`、`mock.store`、`ui.open`、`session.start` 都要自己提供實作，否則 hook 會被略過。
-- repo 在 https://github.com/s7788/pixel-hunter；`.claude-plugin/marketplace.json` 讓它本身就是一個 marketplace（`/plugin install hunt-8bit --marketplace s7788/pixel-hunter`）。
+- repo 在 https://github.com/s7788/pixel-hunter；`.claude-plugin/marketplace.json` 讓它本身就是一個 marketplace（`/plugin install pixel-hunter --marketplace s7788/pixel-hunter`）。

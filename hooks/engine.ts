@@ -227,7 +227,7 @@ export function monsterHpForTarget(id: MonsterId): number {
       for (let i = 0; i < ticks; i += 1) g = step(g, true)
       const perTick = (1e9 - g.hunt!.monsterHp) / ticks
       // no hit landed: a box or stance is off; never make a monster with no HP
-      if (!(perTick > 0)) throw new Error(`hunt-8bit: calibration of ${id} landed no hits; check the collision boxes and stances`)
+      if (!(perTick > 0)) throw new Error(`pixel-hunter: calibration of ${id} landed no hits; check the collision boxes and stances`)
       return Math.round(perTick * ((def.targetMinutes * 60_000) / TICK_MS))
     }
     hp = pass(1e9)
@@ -256,7 +256,7 @@ function damagePerTick(weapon: Weapon, id: MonsterId, scale: number): number {
     const ticks = 6000
     for (let i = 0; i < ticks; i += 1) g = step(g, true)
     const out = (1e9 - g.hunt!.monsterHp) / ticks
-    if (!(out > 0)) throw new Error(`hunt-8bit: calibration of ${weapon} on ${id} landed no hits; check the collision boxes and stances`)
+    if (!(out > 0)) throw new Error(`pixel-hunter: calibration of ${weapon} on ${id} landed no hits; check the collision boxes and stances`)
     return out
   } finally {
     calibrating = undefined

@@ -1,5 +1,5 @@
 {
-  "name": "hunt-8bit",
+  "name": "pixel-hunter",
   "version": "0.10.0",
   "description": "An 8-bit hunter in a side pane that hunts one of nine monsters while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network.",
   "author": {

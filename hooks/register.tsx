@@ -10,21 +10,21 @@ import { enabledMonsters } from './monsters/registry'
 import { huntCells, imageCells, huntRgba, RASTER, toBase64 } from './raster'
 import { HUNT_SIZE, huntSvg, hudText, statsSvg, statsText } from './svg'
 
-const PANE = 'hunt-8bit'
-const TITLE = 'Hunt'
+const PANE = 'pixel-hunter'
+const TITLE = 'pixel-hunter'
 const SAVE_KEY = 'save'
 const PICTURE_KEY = 'terminalPicture'
 /** Ticks between saves while the game moves (10 s). */
 const SAVE_EVERY = 80
 
-const phase = atom({ plugin: 'hunt-8bit', key: 'phase' } as const, 'camp' as HuntPhase)
-const turnStartedAt = atom({ plugin: 'hunt-8bit', key: 'turnStartedAt' } as const, null as number | null)
-const lastElapsedMs = atom({ plugin: 'hunt-8bit', key: 'lastElapsedMs' } as const, 0)
-const world = atom({ plugin: 'hunt-8bit', key: 'world' } as const, null as HuntWorld | null)
-const log = atom({ plugin: 'hunt-8bit', key: 'log' } as const, [] as HuntEvent[])
-const lang = atom({ plugin: 'hunt-8bit', key: 'lang' } as const, 'en' as HuntLang)
+const phase = atom({ plugin: 'pixel-hunter', key: 'phase' } as const, 'camp' as HuntPhase)
+const turnStartedAt = atom({ plugin: 'pixel-hunter', key: 'turnStartedAt' } as const, null as number | null)
+const lastElapsedMs = atom({ plugin: 'pixel-hunter', key: 'lastElapsedMs' } as const, 0)
+const world = atom({ plugin: 'pixel-hunter', key: 'world' } as const, null as HuntWorld | null)
+const log = atom({ plugin: 'pixel-hunter', key: 'log' } as const, [] as HuntEvent[])
+const lang = atom({ plugin: 'pixel-hunter', key: 'lang' } as const, 'en' as HuntLang)
 /** How the terminal draws the scene: terminal cells (works anywhere) or an Image (kitty, Ghostty, iTerm2, WezTerm, foot). */
-const terminalCells = atom({ plugin: 'hunt-8bit', key: 'terminalCells' } as const, true)
+const terminalCells = atom({ plugin: 'pixel-hunter', key: 'terminalCells' } as const, true)
 
 /** working_elapsed: MM:SS, HH:MM:SS past an hour. */
 const fmt = (ms: number): string => {
@@ -189,7 +189,7 @@ export const register: Register = on => {
    * pane redraws every tick, and a closure lives only as long as the drawing
    * that held it, so a click landing just after a redraw used to be lost.
    */
-  on('ui.press', { plugin: 'hunt-8bit' }, async ($, e, next) => {
+  on('ui.press', { plugin: 'pixel-hunter' }, async ($, e, next) => {
     const weapon = WEAPON_CHOICES.find(c => `weapon-${c}` === e.element)
     if (weapon !== undefined) await serial(() => pickWeapon($, weapon))
     else if (e.element === 'picture') await togglePicture($)

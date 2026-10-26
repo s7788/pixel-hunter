@@ -131,7 +131,7 @@ export type HuntWorld = { tick: number; now: number; game: HuntGame }
 
 declare module 'claude-code' {
   interface PluginState {
-    'hunt-8bit': {
+    'pixel-hunter': {
       phase: HuntPhase
       turnStartedAt: number | null
       lastElapsedMs: number

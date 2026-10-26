@@ -11,11 +11,11 @@ import { ACTIONS } from './sprites'
 import type { ActionId } from './sprites'
 
 const PANE = {
-  plugin: 'hunt-8bit',
+  plugin: 'pixel-hunter',
   component: 'Pane',
-  requestId: 'hunt-8bit',
+  requestId: 'pixel-hunter',
   props: {
-    title: 'Hunt',
+    title: 'pixel-hunter',
     isFocused: false,
     bodyColumns: 43,
     placement: 'dock',

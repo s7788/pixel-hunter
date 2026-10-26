@@ -13,7 +13,7 @@ Claude Code 的側邊 pane。你送出提示，獵人就出營去狩獵九隻魔
 在 Claude Code 終端機 session 的提示列輸入：
 
 ```
-/plugin install hunt-8bit --marketplace s7788/pixel-hunter
+/plugin install pixel-hunter --marketplace s7788/pixel-hunter
 ```
 
 按 `y` 新增 marketplace，再選安裝範圍，裝好立刻生效。
@@ -21,7 +21,7 @@ Claude Code 的側邊 pane。你送出提示，獵人就出營去狩獵九隻魔
 從 shell：
 
 ```bash
-claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
+claude plugin install pixel-hunter --marketplace s7788/pixel-hunter
 ```
 
 桌面版 app：點提示框旁的 **+** → **Plugins** → **Add marketplace**，填 `s7788/pixel-hunter`，再 **Add plugin**。
@@ -73,7 +73,7 @@ claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
 
 ## 同人專案
 
-hunt-8bit 是基於魔物獵人系列的免費、非商業、非官方二次創作專案，與 Capcom 無關，未獲 Capcom 官方認可或個別授權。Monster Hunter 與原作角色設計的權利歸各自權利人所有。
+pixel-hunter 是基於魔物獵人系列的免費、非商業、非官方二次創作專案，與 Capcom 無關，未獲 Capcom 官方認可或個別授權。Monster Hunter 與原作角色設計的權利歸各自權利人所有。
 
 本專案以遵循 [Capcom 二次創作規範](https://www.capcom-games.com/ja-jp/fan-content-guidelines/) 為原則。該規範涵蓋加入創作性的遊戲，限制營利用途，且不涵蓋直接使用或加工官方素材、使用官方 Logo 等行為。此說明不代表 Capcom 已個別核准本專案或認證其符合規範。
 

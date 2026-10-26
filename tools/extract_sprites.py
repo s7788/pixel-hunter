@@ -1,4 +1,4 @@
-"""Extract hunt-8bit sprites and scenes from the reference pack into hooks/sprites.gen.ts.
+"""Extract pixel-hunter sprites and scenes from the reference pack into hooks/sprites.gen.ts.
 
 The action boards are AI-generated key-pose images with no fixed pixel pitch,
 so frames are taken at the board's own resolution: background flood-filled

@@ -13,7 +13,7 @@ A side pane for Claude Code. When you send Claude a prompt, your hunter leaves c
 At the prompt of a Claude Code terminal session:
 
 ```
-/plugin install hunt-8bit --marketplace s7788/pixel-hunter
+/plugin install pixel-hunter --marketplace s7788/pixel-hunter
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The plugin is active right away.
@@ -21,7 +21,7 @@ Answer `y` to add the marketplace, then pick a scope. The plugin is active right
 From a shell:
 
 ```bash
-claude plugin install hunt-8bit --marketplace s7788/pixel-hunter
+claude plugin install pixel-hunter --marketplace s7788/pixel-hunter
 ```
 
 In the desktop app, click **+** next to the prompt box, then **Plugins** → **Add marketplace** with `s7788/pixel-hunter`, then **Add plugin**.
@@ -73,7 +73,7 @@ The game speaks your language: Traditional Chinese where Claude does, English ev
 
 ## Fan project
 
-hunt-8bit is a free, non-commercial, unofficial fan project based on Monster Hunter. It is not affiliated with, endorsed by, or officially licensed by Capcom. Monster Hunter and the underlying character designs belong to their respective rights holders.
+pixel-hunter is a free, non-commercial, unofficial fan project based on Monster Hunter. It is not affiliated with, endorsed by, or officially licensed by Capcom. Monster Hunter and the underlying character designs belong to their respective rights holders.
 
 This project is intended to follow the [Capcom Fan Content Guidelines](https://www.capcom-games.com/ja-jp/fan-content-guidelines/). Those guidelines include games with added creative expression, restrict commercial use, and exclude direct reuse or processing of official assets and use of official logos. This statement is not a claim of individual approval or a compliance certification from Capcom.
 
