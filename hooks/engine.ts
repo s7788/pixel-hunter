@@ -590,6 +590,8 @@ export function step(game: Game, working: boolean): Game {
       if (g.modeT >= SLAIN_HOLD + RUN_TICKS) {
         g.hunt = null
         toCamp(g)
+        // Continue the same Claude turn after the victory animation and return trip.
+        g.isResting = !working
         say(g, 'huntDone')
       }
       break
@@ -748,7 +750,7 @@ function settle(g: Game): boolean {
   const monsterFell = toMonster > 0 && hunt.monsterHp === 0
 
   if (monsterFell) {
-    // the next hunt waits for the next turn; set now, so a turn begun during the hold clears it
+    // Hold for the victory animation; step releases rest if Claude is still working on return.
     g.isResting = true
     g.slain += 1
     g.slainBy[hunt.monsterId] = (g.slainBy[hunt.monsterId] ?? 0) + 1

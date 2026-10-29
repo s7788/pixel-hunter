@@ -99,15 +99,16 @@ test('the answer retreats to camp and keeps the monster wounded for the next tur
   expect(viewOf(g).scene).toBe(g.hunt!.scene)
 })
 
-test('new hunts alternate between the two grounds and a slain hunt waits for the next turn', () => {
+test('a completed hunt stays at camp when Claude has finished; the next turn starts a fresh hunt', () => {
   let g = beginTurn(newGame(5), 'velkhana')
   const first = g.hunt!.scene
   g.hunt!.monsterHp = 1
-  g = run(g, 200)
+  for (let i = 0; i < 200 && g.slain === 0; i += 1) g = step(g, true)
+  g = run(endTurn(g), 200, false)
   expect(g.slain).toBe(1)
   expect(g.mode).toBe('camp')
   expect(g.hunt).toBeNull()
-  g = run(g, 100)
+  g = run(g, 100, false)
   expect(g.mode).toBe('camp')
   g = beginTurn(g, 'velkhana')
   expect(g.hunt!.scene).not.toBe(first)

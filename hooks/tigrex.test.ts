@@ -113,7 +113,7 @@ test('every frame of a Tigrex hunt fits the Svg source limit, boxes included', (
 
 test('the hunter never stands inside Tigrex while it faces the hunter', () => {
   let g = beginTurn(newGame(11), 'tigrex')
-  for (let i = 0; i < 3000; i += 1) {
+  for (let i = 0; i < 3000 && g.slain === 0; i += 1) {
     g = step(g, true)
     const turned = ['dash', 'dash3'].includes(g.monster.move) && [2, 3].includes(viewOf(g).monster?.frame ?? -1)
     if (g.mode === 'fight' && !turned) expect(g.hunter.x + 22).toBeLessThanOrEqual(g.monster.x + TIGREX.bounds[0])
