@@ -134,7 +134,7 @@ test('C20/C21: blows on the same tick both land; a double KO is one slain and on
   expect(g.slain).toBe(slain + 1)
   expect(g.carts).toBe(carts + 1)
   expect(g.lastOutcome).toBe('mutual_ko')
-  g = run(g, 80)
+  g = rest(endTurn(g), 80)
   expect(g.mode).toBe('camp')
   expect(g.carts).toBe(carts + 1)
 })
@@ -366,7 +366,9 @@ test('random draws a weapon for each new hunt and keeps it for a hunt carried ov
     expect(g.weapon).toBe(weapon)
     // slain: the next hunt draws again
     g.hunt!.monsterHp = 0.5
-    g = run(g, 400)
+    for (let t = 0; t < 400 && g.mode !== 'slain'; t += 1) g = step(g, true)
+    expect(g.mode).toBe('slain')
+    g = rest(endTurn(g), 100)
     expect(g.hunt).toBeNull()
     g.isResting = false
   }
@@ -421,6 +423,29 @@ test('a save from before weapons (schema 2) gets the great sword and plays on', 
   expect(back.weaponChoice).toBe('greatsword')
   expect(back.mode).toBe(g.mode)
   expect(JSON.stringify(step(back, true).hunt)).toBe(JSON.stringify(step(g, true).hunt))
+})
+
+test('one uninterrupted Claude turn continues through successive hunts and stops on completion', () => {
+  let g = beginTurn(newGame(5), 'velkhana')
+  for (let kill = 1; kill <= 2; kill += 1) {
+    for (let t = 0; t < 200 && g.mode !== 'fight'; t += 1) g = step(g, true)
+    expect(g.mode).toBe('fight')
+    const huntNo = g.huntNo
+    g.hunt!.monsterHp = 1
+    for (let t = 0; t < 1000 && g.mode !== 'slain'; t += 1) g = step(g, true)
+    expect(g.mode).toBe('slain')
+    expect(g.slain).toBe(kill)
+    g = run(g, 150)
+    expect(g.huntNo).toBe(huntNo + 1)
+    expect(g.hunt!.monsterHp).toBeGreaterThan(0)
+    expect(g.mode).toBe('fight')
+  }
+  const huntNo = g.huntNo
+  const hp = g.hunt!.monsterHp
+  g = rest(endTurn(g), 200)
+  expect(g.mode).toBe('camp')
+  expect(g.huntNo).toBe(huntNo)
+  expect(g.hunt!.monsterHp).toBe(hp)
 })
 
 test('a turn begun during the slain hold sets out on a new hunt once the hold is over', () => {

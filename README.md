@@ -32,6 +32,8 @@ The game speaks your language: Traditional Chinese where Claude does, English ev
 
 ## How it plays
 
+If Claude is still working when a monster falls, the hunter finishes the victory animation, returns to camp, and automatically starts another hunt in the same turn. This repeats until Claude answers or you interrupt it.
+
 - **Your turn is the hunt.** A prompt sends the hunter out; Claude's answer, or you interrupting it, brings the hunter home. Subagents don't count, only the main turn.
 - **A new monster each hunt.** Every new hunt draws one of nine, each on its own hunting ground with its own moves and tricks: Great Jagras swells its belly, Tobi-Kadachi charges up, Anjanath readies fire, Barioth loses its wings, Nargacuga and Tigrex rage, Zinogre supercharges, Ruiner Nergigante grows spikes.
 - **The fight runs itself.** The hunter reads the monster's moves: it dodges what would hit it, backs off, runs in, and only swings when the blow would land.

@@ -1,6 +1,6 @@
 {
   "name": "pixel-hunter",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "An 8-bit hunter in a side pane that hunts one of nine monsters while Claude works and runs back to camp when Claude answers. Local only: no model calls, no network.",
   "author": {
     "name": "s7788"

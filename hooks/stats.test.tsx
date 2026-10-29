@@ -38,7 +38,7 @@ test('a kill adds one to the species slain, the total follows, and the tally alw
   expect(g.mode).toBe('slain')
   expect(g.slain).toBe(1)
   expect(g.slainBy).toEqual({ great_jagras: 1 })
-  g = run(g, 80)
+  for (let t = 0; t < 80; t += 1) g = step(g, false)
   expect(g.mode).toBe('camp')
   g = parked('tigrex')
   g.slain = 1
