@@ -148,3 +148,14 @@ function mark(b: Aabb): Rect[] {
 const EFFECTS: Record<View['effects'][number]['fx'], (b: Aabb) => Rect[]> = { spit, flame, tornado, spikes: spike, mark }
 
 export const effectRects = (list: View['effects']): Rect[] => list.flatMap(e => EFFECTS[e.fx](e.box))
+
+/** Three-tick impact spark anchored to the actual contact, never the sprite origin. */
+export function impactRects(list: View['marks']): Rect[] {
+  return list.flatMap(m => {
+    const age = m.age ?? 0
+    if (m.outcome !== 'damaged' || age >= 3) return []
+    const size = 5 - age
+    return [r(m.x - size, m.y - 1, size * 2 + 1, 2, '#ffd21f'),
+      r(m.x - 1, m.y - size, 2, size * 2 + 1, '#fff4c2')]
+  })
+}

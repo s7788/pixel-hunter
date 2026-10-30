@@ -68,6 +68,8 @@ export type ActorView = {
   hitShift?: number
   hitSpread?: number[]
   lift?: number
+  /** A visual-only held weapon for common run/recoil/get-up poses. */
+  weapon?: 'longsword' | 'bow'
 }
 
 export type View = {
@@ -84,8 +86,8 @@ export type View = {
   monsterHpPercent: number | null
   /** Effects drawn on live hit boxes (a projectile in flight). */
   effects: { fx: Fx; box: Aabb }[]
-  /** Debug: where recent hits met (the last MARK_TICKS ticks). */
-  marks: { x: number; y: number; outcome: Outcome }[]
+  /** Contact positions shared by impact flashes and the collision overlay. */
+  marks: { x: number; y: number; outcome: Outcome; age?: number }[]
   /** Camp props: the fire's flicker frame, and the meat on the spit (0 raw .. 1 done; null while eaten). */
   camp: { flicker: number; cook: number | null } | null
 }
@@ -866,6 +868,16 @@ function fight(g: Game): void {
 
   // hunter: finish moves, roll travel, pending dodge, run in, regen, then decide
   const hNow: Move = hunterMove(g, h.move)
+  // A visible wind-up can be abandoned before the hunter commits its hit.
+  // Previously a new monster attack could catch the entire charge unchecked.
+  const windup = hNow.active === undefined ? 0 : sum(hNow.ticks.slice(0, hNow.active)) - h.t
+  const danger = windup > 0 ? threat(g, h.move) : null
+  const warning = monsterMove(g, m.move).warningTicks ?? 0
+  if (m.t < warning && danger !== null && danger < sum(hNow.ticks) - h.t) {
+    h.intent = null
+    hunterDo(g, 'idle')
+    h.rollIn = -1
+  }
   if (h.move === 'roll') h.x = Math.max(HUNTER.minX, h.x - HUNTER.rollDistance / sum(hNow.ticks))
   if (h.move !== 'idle' && h.move !== 'run' && isOver(hNow, h.t)) {
     h.facing = 1
@@ -1044,15 +1056,26 @@ function hazardFits(g: Game, key: MonsterMove): boolean {
 function threat(g: Game, as: HunterMove): number | null {
   const m = g.monster
   const move = monsterMove(g, m.move)
-  if (m.attack === null || move.active === undefined || m.attack.contacts.some(c => c.target === 'hunter')) return null
+  if (m.attack === null || move.active === undefined) return null
+  const spent = m.attack.contacts.some(c => c.target === 'hunter')
+  const currentGroup = launchOf(move, m.t)[0]
   const next = activesOf(move)
     .map(seg => spanOf(move, seg))
-    .find(([, end]) => m.t < end)
+    .find(([start, end]) => m.t < end && (!spent || start > currentGroup))
   if (next === undefined) return null
   const [start] = next
   const body = hunterMove(g, as)
   // facing the monster, as the hunter stands once it stops or swings
   const at = { ...hunterAt(g), renderFlip: 1 as const }
+  if (move.travel !== undefined) {
+    // Time the dodge to actual projectile arrival, rather than its launch.
+    for (let tick = Math.max(m.t, next[0]); tick < next[1]; tick += 1) {
+      const pose = frameOf(move, monsterPoseOf(move, tick))
+      const boxes = hitboxes(move.action, pose, monsterAt(g), flight(g, move, tick), drift(move, tick))
+      if (body.ticks.some((_, p) => touchesAny(boxes, body.body ?? body.action, p, at))) return tick - m.t
+    }
+    return null
+  }
   const reach = monsterReach(g, m.move)
   const hit = body.ticks.some((_, pose) => touchesAny(reach, body.body ?? body.action, pose, at))
   return hit ? Math.max(0, start - m.t) : null
@@ -1131,9 +1154,18 @@ export function viewOf(g: Game): View {
   const def = g.hunt === null ? undefined : monsterDef(g.hunt.monsterId)
   const shown = !inCamp && g.hunt !== null && def !== undefined
   const mMove = shown ? monsterMove(g, g.monster.move) : undefined
+  const hunter = actorView(hunterMove(g, h.move), hunterPoseOf(h.move, hunterMove(g, h.move), h.t), h, h.facing)
+  // Fractional lunge positions must not round the hunter into the monster.
+  hunter.x = Math.floor(h.x)
+  if (g.weapon !== 'greatsword' && ['run', 'hit', 'down'].includes(h.move)) {
+    const move = HUNTER.moves[h.move as 'run' | 'hit' | 'down']
+    hunter.action = move.action
+    hunter.frame = hunterPoseOf(h.move, move, h.t)
+    hunter.weapon = g.weapon
+  }
   return {
     scene: inCamp || g.hunt === null ? CAMP_SCENE : g.hunt.scene,
-    hunter: actorView(hunterMove(g, h.move), hunterPoseOf(h.move, hunterMove(g, h.move), h.t), h, h.facing),
+    hunter,
     monster:
       mMove === undefined
         ? null
@@ -1154,7 +1186,7 @@ export function viewOf(g: Game): View {
     marks: inCamp
       ? []
       : g.hits.flatMap(hit =>
-          hit.x !== undefined && hit.y !== undefined && g.simTick - hit.tick < MARK_TICKS ? [{ x: hit.x, y: hit.y, outcome: hit.outcome }] : [],
+          hit.x !== undefined && hit.y !== undefined && g.simTick - hit.tick < MARK_TICKS ? [{ x: hit.x, y: hit.y, outcome: hit.outcome, age: g.simTick - hit.tick }] : [],
         ),
     camp: inCamp
       ? { flicker: g.simTick % 4, cook: h.move === 'eat' ? null : h.move === 'roast' ? Math.min(1, h.t / CAMP.roastTicks) : 0 }

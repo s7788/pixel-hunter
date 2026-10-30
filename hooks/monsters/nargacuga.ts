@@ -54,25 +54,25 @@ export const NARGACUGA = {
     walk: { action: 'NA_WALK', ticks: [3, 3, 3, 3], loop: true },
     // low and long: 88 px on, 24 px high, landing at the end of the active pose
     pounce: {
-      action: 'NA01', ticks: [3, 3, 4, 9], active: 2, damage: 2, weight: 4, cooldown: 16, advance: 88,
+      action: 'NA01', ticks: [3, 3, 4, 9], warningTicks: 6, active: 2, damage: 2, weight: 4, cooldown: 16, advance: 88,
       lift: [[3, 0], [6, -24], [10, 0]], range: ['mid'], label: '刃翼飛撲', hitLabel: '被刃翼飛撲擊中',
     },
     tailSweep: {
-      action: 'NA02', ticks: [4, 3, 4, 11], active: 2, damage: 2, weight: 3, cooldown: 20,
+      action: 'NA02', ticks: [4, 3, 4, 11], warningTicks: 7, active: 2, damage: 2, weight: 3, cooldown: 20,
       range: ['near'], label: '橫向尾掃', hitLabel: '被尾掃擊中',
     },
     tailSlam: {
-      action: 'NA03', ticks: [5, 5, 2, 12], active: 2, damage: 3, weight: 3, cooldown: 24, openFrom: 12,
+      action: 'NA03', ticks: [5, 5, 2, 12], warningTicks: 10, active: 2, damage: 3, weight: 3, cooldown: 24, openFrom: 12,
       range: ['near', 'mid'], label: '重尾砸地', hitLabel: '被尾砸擊中',
     },
     // enraged: slam, raise again, slam (two groups), then stuck
     tailSlam2: {
       action: 'NA03X', ticks: [5, 5, 2, 6, 2, 12], frames: [0, 1, 2, 3, 4, 5], active: 2, actives: [2, 4],
-      damage: 3, weight: 3, cooldown: 32, openFrom: 20,
+      warningTicks: 10, damage: 3, weight: 3, cooldown: 32, openFrom: 20,
       range: ['near', 'mid'], label: '二連尾砸', hitLabel: '被尾砸擊中',
     },
     spikes: {
-      action: 'NA04', ticks: [4, 4, 12, 8], active: 2, damage: 1, weight: 2, cooldown: 28, travel: 24, spread: [-4, 0, 4],
+      action: 'NA04', ticks: [4, 4, 12, 8], warningTicks: 8, active: 2, damage: 1, weight: 2, cooldown: 28, travel: 24, spread: [-4, 0, 4],
       fx: 'spikes', range: ['mid', 'far'], label: '尾棘散射', hitLabel: '被尾棘擊中',
     },
     roar: { action: 'NA_ROAR', ticks: [2, 2, 2, 2] },
