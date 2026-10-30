@@ -1,6 +1,6 @@
 # pixel-hunter 開發說明
 
-給要改這個 mod 的人：設計範圍、素材管線與已知限制。使用者介紹在 [README.md](../README.md)（中文版 [README.zh-TW.md](../README.zh-TW.md)），接手時的決策與檔案地圖在 [HANDOFF.md](../HANDOFF.md)。
+給要改這個 mod 的人：設計範圍、素材管線與已知限制。使用者介紹在 [README.md](../README.md)（中文版 [README.zh-TW.md](../README.zh-TW.md)）。
 
 獵人（大劍、太刀或弓）跟著 Claude 的主回合出營、狩獵九隻魔物之一、撤退。魔物註冊、九隻魔物、討伐統計與 CLI 終端機畫面來自另一條開發線（v0.4–v0.9.5），v0.10 與武器線合併。美術方向來自 `hunt_8bit_reference`（v1.2）參考包，以像素改編為準，不是原作素材。
 
@@ -74,7 +74,7 @@ PYTHONUTF8=1 python -I tools/svg_to_gif.py demo-frames docs/media/demo.gif --sca
 
 支援圖片協定的終端機（kitty、Ghostty、iTerm2、WezTerm、foot）可以按 pane 上的「畫面：字元（點此改圖片）」按鈕改成 `Image`（原尺寸 384×216 RGBA，細節完整）；選擇會存起來。程式沒辦法偵測終端機有沒有圖片支援，所以預設是字元；在不支援的終端機（例如 Windows Terminal）選了圖片只會看到 alt 文字「8-bit hunt: 狀態 — 魔物名」，再按一次按鈕即可換回。
 
-`hooks/raster.ts` 直接把場景、角色、營火與特效畫成 RGBA（不經過 SVG；放置、營火、特效與 HP／ST 條與 SVG 版共用 `hooks/shapes.ts`）。每次重畫約 1–3 ms（見 HANDOFF）。**限制（未驗證）：** 真實終端機上的字元版畫面是從截圖推斷的版面，我只在使用者的 Windows Terminal 上看過「圖片模式只剩文字」，字元版與圖片版都還沒在真實終端機實測；字元版的色彩上限（引擎每幀約 1024 組前景／背景色對）可能讓部分顏色被近似。
+`hooks/raster.ts` 直接把場景、角色、營火與特效畫成 RGBA（不經過 SVG；放置、營火、特效與 HP／ST 條與 SVG 版共用 `hooks/shapes.ts`）。每次重畫約 1–3 ms。**限制（未驗證）：** 真實終端機上的字元版畫面是從截圖推斷的版面，我只在使用者的 Windows Terminal 上看過「圖片模式只剩文字」，字元版與圖片版都還沒在真實終端機實測；字元版的色彩上限（引擎每幀約 1024 組前景／背景色對）可能讓部分顏色被近似。
 
 ### 讓 pane 變寬（字元畫面更清楚）
 
@@ -101,4 +101,4 @@ PYTHONUTF8=1 python -I tools/svg_to_gif.py demo-frames docs/media/demo.gif --sca
 
 ## 多個 session
 
-每個 Claude session 各自推進自己的一份狩獵（`$.state`），但共用同一個 `$.store` 存檔：每 10 秒與每次模式切換時整份覆寫，最後寫入者為準。同時開多個 session 的話，魔物血量會在兩邊的進度之間跳動，討伐統計（`slain`、`slainBy`）可能少算或重複。**建議只在一個 session 開 hunt pane。**（改進方向見 HANDOFF 的待做清單。）
+每個 Claude session 各自推進自己的一份狩獵（`$.state`），但共用同一個 `$.store` 存檔：每 10 秒與每次模式切換時整份覆寫，最後寫入者為準。同時開多個 session 的話，魔物血量會在兩邊的進度之間跳動，討伐統計（`slain`、`slainBy`）可能少算或重複。**建議只在一個 session 開 hunt pane。**

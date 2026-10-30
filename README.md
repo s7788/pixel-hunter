@@ -89,7 +89,7 @@ The non-commercial fan-project statement applies to the Monster Hunter-based wor
 
 ## Contributing
 
-How it's built, the sprite pipeline and the known limits: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Design decisions and the file map: [HANDOFF.md](HANDOFF.md). Checks:
+How it's built, the sprite pipeline and the known limits: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Checks:
 
 ```bash
 claude plugin validate .
