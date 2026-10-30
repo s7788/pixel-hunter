@@ -89,7 +89,7 @@ pixel-hunter 是基於魔物獵人系列的免費、非商業、非官方二次�
 
 ## 參與開發
 
-架構、素材管線與已知限制見 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)；設計決策與檔案地圖見 [HANDOFF.md](HANDOFF.md)。檢查指令：
+架構、素材管線與已知限制見 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。檢查指令：
 
 ```bash
 claude plugin validate .
