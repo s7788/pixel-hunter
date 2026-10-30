@@ -20,6 +20,8 @@ test('20 Nargacuga hunts: median near the 5-minute target (±20%); stats printed
   expect(s.median).toBeLessThan(NARGACUGA.targetMinutes * 1.2)
   expect(rages).toBeGreaterThan(0)
   expect(s.moves.tailSlam2 ?? 0).toBeGreaterThan(0)
+  // Fixed seeds previously carted in 15/20 hunts despite meeting the time target.
+  expect(s.carted).toBeLessThanOrEqual(8)
 })
 
 /** Enraged or not, on the hunter's side of a tail slam (both groups in reach). */

@@ -1,7 +1,8 @@
 import { HUNTER } from './data'
 import type { View } from './engine'
 import type { Rect } from './shapes'
-import { barRects, campRects, effectRects, placeActor } from './shapes'
+import { barRects, campRects, effectRects, impactRects, placeActor } from './shapes'
+import { actorLayers } from './visuals'
 import { ACTIONS, SCENES } from './sprites'
 import type { RleRow, SceneId } from './sprites'
 
@@ -97,12 +98,12 @@ function sceneBase(id: SceneId): Uint8Array {
 }
 
 const frameCache = new Map<string, Pixels>()
-function frame(action: keyof typeof ACTIONS, index: number): Pixels {
-  const key = `${action}:${index}`
+function frame(a: Parameters<typeof placeActor>[0], effect: boolean): Pixels {
+  const key = `${a.action}:${a.frame}:${a.weapon ?? ''}:${effect}`
   let px = frameCache.get(key)
   if (px === undefined) {
-    const sprite = ACTIONS[action]
-    px = decode(sprite.frames[index] ?? sprite.frames[0] ?? [], sprite.palette)
+    const sprite = actorLayers(a)[effect ? 'effect' : 'body']
+    px = decode(sprite.frames[0] ?? [], sprite.palette)
     frameCache.set(key, px)
   }
   return px
@@ -145,9 +146,9 @@ function fillRects(dst: Uint8Array, list: readonly Rect[], layer = false): void 
   }
 }
 
-function drawActor(dst: Uint8Array, a: Parameters<typeof placeActor>[0], ground: number, layer = false): void {
+function drawActor(dst: Uint8Array, a: Parameters<typeof placeActor>[0], ground: number, layer = false, effect = false): void {
   const at = placeActor(a, ground)
-  const px = frame(a.action, a.frame)
+  const px = frame(a, effect)
   for (let y = 0; y < px.h; y += 1) {
     const dy = at.top + y
     if (dy < 0 || dy >= H) continue
@@ -166,7 +167,10 @@ export function huntRgba(view: View, isFrozen: boolean): Uint8Array {
   if (view.camp !== null) fillRects(out, campRects(view.camp))
   if (view.monster !== null) drawActor(out, view.monster, ground + (view.monster.lift ?? 0))
   drawActor(out, view.hunter, ground)
+  if (view.monster !== null) drawActor(out, view.monster, ground + (view.monster.lift ?? 0), false, true)
+  drawActor(out, view.hunter, ground, false, true)
   fillRects(out, effectRects(view.effects))
+  fillRects(out, impactRects(view.marks))
   const low = view.hp <= HUNTER.hpMax / 4
   fillRects(out, [
     ...barRects(34, 9, HUNTER.hpMax, view.hp, low ? '#e8402a' : '#2ee05a', '#2a3550'),
@@ -183,7 +187,10 @@ function actorLayer(view: View): Uint8Array {
   if (view.camp !== null) fillRects(out, campRects(view.camp), true)
   if (view.monster !== null) drawActor(out, view.monster, ground + (view.monster.lift ?? 0), true)
   drawActor(out, view.hunter, ground, true)
+  if (view.monster !== null) drawActor(out, view.monster, ground + (view.monster.lift ?? 0), true, true)
+  drawActor(out, view.hunter, ground, true, true)
   fillRects(out, effectRects(view.effects), true)
+  fillRects(out, impactRects(view.marks), true)
   return out
 }
 

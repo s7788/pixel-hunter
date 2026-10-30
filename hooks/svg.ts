@@ -9,7 +9,8 @@ import type { RleRow, SceneId } from './sprites'
 import { ACTIONS, SCENES } from './sprites'
 import { HEADS } from './gen/heads'
 import type { Rect } from './shapes'
-import { barRects, campRects, effectRects, placeActor } from './shapes'
+import { barRects, campRects, effectRects, impactRects, placeActor } from './shapes'
+import { actorLayers } from './visuals'
 import { MONSTERS } from './monsters/registry'
 
 type Palette = Readonly<Record<string, string>>
@@ -75,10 +76,10 @@ function scene(id: SceneId): string {
 
 /** An actor's frame in local coordinates, placed (and mirrored) per tick. */
 const frameCache = new Map<string, string>()
-function actor(a: ActorView, ground: number): string {
-  const sprite = ACTIONS[a.action]
-  const rows = sprite.frames[a.frame] ?? sprite.frames[0] ?? []
-  const key = `${a.action}:${a.frame}`
+function actor(a: ActorView, ground: number, effect = false): string {
+  const sprite = actorLayers(a)[effect ? 'effect' : 'body']
+  const rows = sprite.frames[0] ?? []
+  const key = `${a.action}:${a.frame}:${a.weapon ?? ''}:${effect}`
   let paths = frameCache.get(key)
   if (paths === undefined) {
     paths = gridToPaths(rows, sprite.palette)
@@ -163,7 +164,8 @@ export function huntSvg(phase: HuntPhase, view: View, clock: string, showBoxes =
     (view.camp === null ? '' : rects(campRects(view.camp))) +
     (view.monster === null ? '' : actor(view.monster, ground + (view.monster.lift ?? 0))) +
     actor(view.hunter, ground) +
-    effects(view.effects)
+    (view.monster === null ? '' : actor(view.monster, ground + (view.monster.lift ?? 0), true)) +
+    actor(view.hunter, ground, true) + effects(view.effects) + rects(impactRects(view.marks))
   if (showBoxes) actors += (view.monster === null ? '' : boxes(view.monster, ground + (view.monster.lift ?? 0), -1)) + boxes(view.hunter, ground, 1) + marks(view.marks)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">` +

@@ -16,6 +16,8 @@ export const RANGE_BANDS: Readonly<Record<Range, readonly [number, number]>> = {
 export type Fx = 'spit' | 'flame' | 'tornado' | 'spikes' | 'mark'
 
 export type MonsterMove = Move & {
+  /** Clear warning: the hunter may abandon an uncommitted swing during these first ticks. */
+  warningTicks?: number
   /** Shown when the move starts. */
   label?: string
   /** Shown when it hits the hunter. */
