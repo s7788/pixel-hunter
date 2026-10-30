@@ -30,6 +30,26 @@ claude plugin install pixel-hunter --marketplace s7788/pixel-hunter
 
 遊戲文字跟著 Claude 的語言：Claude 用繁體中文就顯示中文，其他語言（包括簡體中文）一律顯示英文。先看 Claude 的 `language` 設定，沒設再看系統地區。
 
+## 更新
+
+在 shell（PowerShell、bash 或 zsh）依序執行：
+
+1. 更新 marketplace 目錄：
+
+   ```bash
+   claude plugin marketplace update pixel-hunter
+   ```
+
+2. 更新已安裝的外掛：
+
+   ```bash
+   claude plugin update pixel-hunter@pixel-hunter
+   ```
+
+   前面的 `pixel-hunter` 是外掛名稱，`@` 後面是 marketplace 名稱。如果安裝時指定範圍，請在指令後加上對應的 `--scope user`、`--scope project` 或 `--scope local`。專案或本機範圍的安裝，請在該專案目錄執行。
+
+3. 重新啟動 Claude Code 載入更新，再輸入 `/pixel-hunter` 開啟 pane，確認武器選擇區下方的版號。如果仍看到舊指令，可用 `claude plugin list` 檢查已安裝版本，並確認已重新啟動使用該安裝版本的 session。
+
 ## 玩法
 
 魔物被擊倒時，如果 Claude 還在處理同一回合，獵人會完成討伐演出、回營後自動出發狩獵下一隻，持續接續直到 Claude 回答或你中斷它。

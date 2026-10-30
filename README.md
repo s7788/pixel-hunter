@@ -30,6 +30,26 @@ Needs Claude Code 2.1.275 or later (tested on 2.1.304 in the desktop app). The d
 
 The game speaks your language: Traditional Chinese where Claude does, English everywhere else. It follows Claude's `language` setting, then your system locale.
 
+## Update
+
+Run these commands in a shell (PowerShell, bash or zsh):
+
+1. Refresh the marketplace catalog:
+
+   ```bash
+   claude plugin marketplace update pixel-hunter
+   ```
+
+2. Update the installed plugin:
+
+   ```bash
+   claude plugin update pixel-hunter@pixel-hunter
+   ```
+
+   The first `pixel-hunter` is the plugin name; the name after `@` is the marketplace name. If you installed it in a specific scope, append `--scope user`, `--scope project` or `--scope local` to match the installation. For a project or local installation, run the command from that project.
+
+3. Restart Claude Code to load the update, then enter `/pixel-hunter` to open the pane. Check the version below the weapon selection. If old commands still appear, check the installed version with `claude plugin list` and make sure you restarted the session using that installation.
+
 ## How it plays
 
 If Claude is still working when a monster falls, the hunter finishes the victory animation, returns to camp, and automatically starts another hunt in the same turn. This repeats until Claude answers or you interrupt it.
