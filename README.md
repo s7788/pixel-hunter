@@ -64,8 +64,8 @@ If Claude is still working when a monster falls, the hunter finishes the victory
 ## Commands
 
 - `/pixel-hunter` opens the pane (it also opens by itself when a session starts).
-- `/hunt-demo` starts or ends a hunt without a Claude turn, to try it out.
-- `/hunt-demo <monster>` drops the hunt under way and heads out after that monster, for example `/hunt-demo zinogre`.
+- `/pixel-hunter-demo` starts or ends a hunt without a Claude turn, to try it out.
+- `/pixel-hunter-demo <monster>` drops the hunt under way and heads out after that monster, for example `/pixel-hunter-demo zinogre`.
 
 ## Good to know
 

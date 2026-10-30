@@ -137,7 +137,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'pixel-hunter', description: 'Open the 8-bit hunt pane' })
     await $.command.register({
-      name: 'hunt-demo',
+      name: 'pixel-hunter-demo',
       description: 'Toggle the hunt on or off without a Claude turn; with a monster id, start a fresh hunt of it (debug)',
       argumentHint: '[monster id]',
     })
@@ -170,12 +170,12 @@ export const register: Register = on => {
     return { text: 'Hunt pane opened.' }
   })
 
-  on('command.run', { command: 'hunt-demo' }, async ($, e) => {
+  on('command.run', { command: 'pixel-hunter-demo' }, async ($, e) => {
     const wanted = e.args.trim()
     if (wanted !== '') {
       const monster = enabledMonsters().find(id => id === wanted)
       if (monster === undefined) return { text: `Unknown monster "${wanted}". One of: ${enabledMonsters().join(', ')}.` }
-      await serial(() => startTurn($, `hunt-demo -> ${monster}`, monster))
+      await serial(() => startTurn($, `pixel-hunter-demo -> ${monster}`, monster))
       await $.ui.open({ id: PANE, title: TITLE })
       return { text: `Hunt demo: a fresh ${monster} hunt (the one under way was dropped).` }
     }
@@ -183,7 +183,7 @@ export const register: Register = on => {
     await serial(async () => {
       // Read inside the queue so consecutive toggles see the preceding change.
       isHunting = (await read($, phase)) === 'hunting'
-      await (isHunting ? finishTurn($, 'answer') : startTurn($, 'hunt-demo -> hunting'))
+      await (isHunting ? finishTurn($, 'answer') : startTurn($, 'pixel-hunter-demo -> hunting'))
     })
     await $.ui.open({ id: PANE, title: TITLE })
     return { text: `Hunt demo: ${isHunting ? 'retreat' : 'hunting'}.` }
