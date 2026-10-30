@@ -23,13 +23,13 @@
 
 ## 版號
 
-目前版本為 `0.11.1`，顯示於武器選擇區下方。發版時同步更新 `.claude-plugin/plugin.json` 的 `version` 與 `hooks/version.ts`（hooks 執行環境不允許匯入 JSON）。
+目前版本為 `0.11.2`，顯示於武器選擇區下方。發版時同步更新 `.claude-plugin/plugin.json` 的 `version` 與 `hooks/version.ts`（hooks 執行環境不允許匯入 JSON）。
 
 ## 指令
 
 - `/pixel-hunter`：開啟 pane。
-- `/hunt-demo`：不經 Claude 回合，手動切換狩獵或撤退（除錯用）。
-- `/hunt-demo <魔物 id>`（例 `/hunt-demo great_jagras`）：丟棄進行中的狩獵，立刻出營打一場指定魔物（除錯用；討伐與力竭次數保留）。
+- `/pixel-hunter-demo`：不經 Claude 回合，手動切換狩獵或撤退（除錯用）。
+- `/pixel-hunter-demo <魔物 id>`（例 `/pixel-hunter-demo great_jagras`）：丟棄進行中的狩獵，立刻出營打一場指定魔物（除錯用；討伐與力竭次數保留）。
 - pane 只有遊戲畫面與武器按鈕，沒有除錯開關或除錯文字。
 
 ## 素材管線

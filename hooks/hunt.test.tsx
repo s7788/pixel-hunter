@@ -219,20 +219,20 @@ test('/pixel-hunter registers and opens the pane', async ($, on) => {
     return { value: { command: e.name } }
   })
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
-  expect(commands).toEqual(['pixel-hunter', 'hunt-demo'])
+  expect(commands).toEqual(['pixel-hunter', 'pixel-hunter-demo'])
   opened.length = 0
   await $.command.run({ command: 'pixel-hunter', args: '' } as never)
   expect(opened).toEqual(['pixel-hunter'])
 })
 
-test('/hunt-demo toggles the hunt without a turn', async ($, on) => {
+test('/pixel-hunter-demo toggles the hunt without a turn', async ($, on) => {
   mock.clock(on)
   mock.store(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'hunt-demo', args: '' } as never)
+  await $.command.run({ command: 'pixel-hunter-demo', args: '' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('8-bit hunt: hunting')
   await ui.unmount()
@@ -246,8 +246,8 @@ test('concurrent demo toggles start then retreat in arrival order', async ($, on
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   const results = await Promise.all([
-    $.command.run({ command: 'hunt-demo', args: '' } as never),
-    $.command.run({ command: 'hunt-demo', args: '' } as never),
+    $.command.run({ command: 'pixel-hunter-demo', args: '' } as never),
+    $.command.run({ command: 'pixel-hunter-demo', args: '' } as never),
   ])
   expect(results[0].text).toBe('Hunt demo: hunting.')
   expect(results[1].text).toBe('Hunt demo: retreat.')
@@ -505,16 +505,16 @@ test('every callout and attack has its words in both languages; a callout saved 
   expect(t('en', '撤退')).toBe('撤退')
 })
 
-test('/hunt-demo <monster> starts a fresh hunt of that species; an unknown id is refused', { timeoutMs: 60000 }, async ($, on) => {
+test('/pixel-hunter-demo <monster> starts a fresh hunt of that species; an unknown id is refused', { timeoutMs: 60000 }, async ($, on) => {
   mock.clock(on)
   const saved = memStore(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
-  const bad = await $.command.run({ command: 'hunt-demo', args: 'rathalos' } as never)
+  const bad = await $.command.run({ command: 'pixel-hunter-demo', args: 'rathalos' } as never)
   expect(bad.text).toMatch(/Unknown monster "rathalos"/)
-  const ok = await $.command.run({ command: 'hunt-demo', args: ' great_jagras ' } as never)
+  const ok = await $.command.run({ command: 'pixel-hunter-demo', args: ' great_jagras ' } as never)
   expect(ok.text).toMatch(/great_jagras/)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('8-bit hunt: hunting')

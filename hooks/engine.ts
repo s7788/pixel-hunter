@@ -401,7 +401,7 @@ export function beginTurn(game: Game, monster?: MonsterId): Game {
 }
 
 /**
- * Debug (`/hunt-demo <monsterId>`): drop the hunt under way and head out at
+ * Debug (`/pixel-hunter-demo <monsterId>`): drop the hunt under way and head out at
  * once after a fresh one of this species. Tallies and the seed stay.
  */
 export function debugHunt(game: Game, monster: MonsterId): Game {
