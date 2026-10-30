@@ -63,7 +63,7 @@ claude plugin install pixel-hunter --marketplace s7788/pixel-hunter
 
 ## 指令
 
-- `/hunt`：開啟 pane（session 開始時也會自己打開）。
+- `/pixel-hunter`：開啟 pane（session 開始時也會自己打開）。
 - `/hunt-demo`：不經 Claude 回合，手動開始或結束一場狩獵，試玩用。
 - `/hunt-demo <魔物 id>`：丟下進行中的狩獵，直接出營打指定的魔物，例如 `/hunt-demo zinogre`。
 

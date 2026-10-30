@@ -1,5 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import { version } from './version'
 
 import { HUNTER, TICK_MS, WEAPON_CHOICES } from './data'
 import { enabledMonsters, monsterDef, VELKHANA } from './monsters/registry'
@@ -197,10 +198,31 @@ test('a wide, short inline pane: the cells fill the width the rows allow', { tim
   const wide = { ...PANE, props: { ...PANE.props, bodyColumns: 160, placement: 'inline' as const, scroll: { offset: 0, bodyRows: 30 } } }
   const ui = await $.ui.mount({ ...wide, surface: 'terminal' })
   const raster = (await ui.find({ type: 'Raster' }))!.props as { columns: number; rows: number }
-  // 30 rows less 7 for the words: 23 rows, and the 384:216 shape gives 82 columns
-  expect(raster.rows).toBe(23)
-  expect(raster.columns).toBe(82)
+  // 30 rows less 8 for the words including the version: 22 rows, 78 columns.
+  expect(raster.rows).toBe(22)
+  expect(raster.columns).toBe(78)
   await ui.unmount()
+})
+
+test('/pixel-hunter registers and opens the pane', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  const commands: string[] = []
+  const opened: string[] = []
+  on('ui.open', (_, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true as const } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => {
+    commands.push(e.name)
+    return { value: { command: e.name } }
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  expect(commands).toEqual(['pixel-hunter', 'hunt-demo'])
+  opened.length = 0
+  await $.command.run({ command: 'pixel-hunter', args: '' } as never)
+  expect(opened).toEqual(['pixel-hunter'])
 })
 
 test('/hunt-demo toggles the hunt without a turn', async ($, on) => {
@@ -213,6 +235,24 @@ test('/hunt-demo toggles the hunt without a turn', async ($, on) => {
   await $.command.run({ command: 'hunt-demo', args: '' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('8-bit hunt: hunting')
+  await ui.unmount()
+})
+
+test('concurrent demo toggles start then retreat in arrival order', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  const results = await Promise.all([
+    $.command.run({ command: 'hunt-demo', args: '' } as never),
+    $.command.run({ command: 'hunt-demo', args: '' } as never),
+  ])
+  expect(results[0].text).toBe('Hunt demo: hunting.')
+  expect(results[1].text).toBe('Hunt demo: retreat.')
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('8-bit hunt: retreat')
   await ui.unmount()
 })
 
@@ -333,7 +373,8 @@ test('the pane shows the picture and the weapon buttons, and no debug controls o
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.findAll({ type: 'Text' })).toHaveLength(0)
+  expect(await ui.findAll({ type: 'Text' })).toHaveLength(1)
+  expect(await ui.find({ type: 'Text', text: `v${version}` })).toBeDefined()
   const buttons = await ui.findAll({ type: 'Button' })
   expect(buttons).toHaveLength(4)
   expect(await ui.find({ type: 'Button', text: /除錯|碰撞框/ })).toBeUndefined()

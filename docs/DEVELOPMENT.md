@@ -21,9 +21,13 @@
 - 營地（v0.3）：回合之間獵人會走到營火旁烤肉、吃肉；回合開始立刻出營。
 - 碰撞（v0.2）：只有攻擊框在有效姿勢碰到受擊框才扣血，同招對同目標只算一次；獵人會跑近、往後翻滾，冰呪龍只用碰得到的招。框在 `hooks/collision-data.ts`；pane 已沒有除錯開關，要看框請用 `huntSvg(phase, view, clock, true)`（測試或 `tools/demo_frames.mts`）。
 
+## 版號
+
+目前版本為 `0.11.1`，顯示於武器選擇區下方。發版時同步更新 `.claude-plugin/plugin.json` 的 `version` 與 `hooks/version.ts`（hooks 執行環境不允許匯入 JSON）。
+
 ## 指令
 
-- `/hunt`：開啟 pane。
+- `/pixel-hunter`：開啟 pane。
 - `/hunt-demo`：不經 Claude 回合，手動切換狩獵或撤退（除錯用）。
 - `/hunt-demo <魔物 id>`（例 `/hunt-demo great_jagras`）：丟棄進行中的狩獵，立刻出營打一場指定魔物（除錯用；討伐與力竭次數保留）。
 - pane 只有遊戲畫面與武器按鈕，沒有除錯開關或除錯文字。
@@ -78,7 +82,7 @@ PYTHONUTF8=1 python -I tools/svg_to_gif.py demo-frames docs/media/demo.gif --sca
 
 ### 讓 pane 變寬（字元畫面更清楚）
 
-字元畫面的清晰度只取決於 pane 有多少欄：49 欄約 98×28 像素，120 欄約 240×68 像素。畫面會用滿 pane 的寬度，但高度不會超過 pane 可用的列數（保留 7 列給下方文字）；列數不夠時，會照 384:216 的比例縮窄寬度。
+字元畫面的清晰度只取決於 pane 有多少欄：49 欄約 98×28 像素，120 欄約 240×68 像素。畫面會用滿 pane 的寬度，但高度不會超過 pane 可用的列數（保留 8 列給下方文字（含版號））；列數不夠時，會照 384:216 的比例縮窄寬度。
 
 - **改用主畫面版面（最有效）**：Claude Code 的全螢幕版面會把 pane 停靠在對話旁邊（終端機 110 欄以上時），寬度只有一部分。主畫面版面則把 pane 放在輸入框上方、用滿終端機寬度。啟動前設定環境變數：
 
