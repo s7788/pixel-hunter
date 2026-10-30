@@ -425,8 +425,8 @@ export function toBase64(bytes: Uint8Array): string {
   return out
 }
 
-/** Rows the pane keeps under the picture for its words (status, HP, label, picture button, tally, debug). */
-export const TEXT_ROWS = 7
+/** Rows below the picture: status, HP, label, picture button, tally, weapon, version, and spacing. */
+export const TEXT_ROWS = 8
 
 /**
  * The terminal's box of cells for the picture: as many columns as the pane has

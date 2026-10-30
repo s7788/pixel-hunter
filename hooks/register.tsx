@@ -1,5 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
+import { version } from './version'
 
 import type { HuntEvent, HuntLang, HuntPhase, HuntWeaponChoice, HuntWorld, MonsterId } from '../types'
 import { HUNTER, TICK_MS, WEAPON_CHOICES } from './data'
@@ -134,7 +135,7 @@ export const register: Register = on => {
   }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'hunt', description: 'Open the 8-bit hunt pane' })
+    await $.command.register({ name: 'pixel-hunter', description: 'Open the 8-bit hunt pane' })
     await $.command.register({
       name: 'hunt-demo',
       description: 'Toggle the hunt on or off without a Claude turn; with a monster id, start a fresh hunt of it (debug)',
@@ -164,7 +165,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'hunt' }, async $ => {
+  on('command.run', { command: 'pixel-hunter' }, async $ => {
     await $.ui.open({ id: PANE, title: TITLE })
     return { text: 'Hunt pane opened.' }
   })
@@ -178,8 +179,12 @@ export const register: Register = on => {
       await $.ui.open({ id: PANE, title: TITLE })
       return { text: `Hunt demo: a fresh ${monster} hunt (the one under way was dropped).` }
     }
-    const isHunting = (await read($, phase)) === 'hunting'
-    await serial(() => (isHunting ? finishTurn($, 'answer') : startTurn($, 'hunt-demo -> hunting')))
+    let isHunting = false
+    await serial(async () => {
+      // Read inside the queue so consecutive toggles see the preceding change.
+      isHunting = (await read($, phase)) === 'hunting'
+      await (isHunting ? finishTurn($, 'answer') : startTurn($, 'hunt-demo -> hunting'))
+    })
     await $.ui.open({ id: PANE, title: TITLE })
     return { text: `Hunt demo: ${isHunting ? 'retreat' : 'hunting'}.` }
   })
@@ -284,6 +289,7 @@ export const register: Register = on => {
             {t(lg, 'pickAfterTurn')}
           </Text>
         )}
+        <Text dimColor>v{version}</Text>
       </Box>
     )
   })
